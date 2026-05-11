@@ -15,7 +15,11 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BEDROCK_MODEL_ID = 'us.anthropic.claude-haiku-4-5';
+// Bedrock cross-region inference profile for Claude Haiku 4.5. The PRD's bare prefix
+// (`us.anthropic.claude-haiku-4-5`) is not a valid Bedrock identifier — the actual ID
+// includes the model date and version suffix. Verify with:
+//   aws bedrock list-inference-profiles --region us-west-2
+const BEDROCK_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 export class InitechTerminalStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {

@@ -210,7 +210,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     const parsed = await callBedrock(req.input, req.context);
     return response(200, parsed);
-  } catch {
+  } catch (err) {
+    console.error('Intent parsing failed:', err instanceof Error ? err.stack ?? err.message : err);
     return response(500, {
       error: 'Intent parsing failed',
       fallback: { action: 'unknown' },
