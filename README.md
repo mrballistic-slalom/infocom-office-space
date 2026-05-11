@@ -110,8 +110,9 @@ npm run build              # produces dist/
 cd cdk && npm install
 
 # Required env vars — the stack will refuse to synth without them.
-export APP_PASSWORD='***REDACTED***'                       # or whatever you want
-export JWT_SECRET=$(openssl rand -hex 32)          # high-entropy, rotate to invalidate sessions
+# Choose your own password; do NOT commit it.
+export APP_PASSWORD='...your-password-here...'
+export JWT_SECRET=$(openssl rand -hex 32)  # rotate to invalidate sessions
 
 npm run deploy             # cdk deploy
 ```
