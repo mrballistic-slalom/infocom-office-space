@@ -39,9 +39,39 @@ interface ParsedAction {
 const CORS_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
   'Access-Control-Allow-Methods': 'POST,OPTIONS',
 };
+
+/** Constant-time equality (avoid early-exit timing leak). */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/**
+ * Validates the `Authorization: Bearer <token>` header against the SESSION_TOKEN env var.
+ * Returns true if the token is missing/wrong; the caller should short-circuit to 401.
+ */
+function isUnauthorized(event: APIGatewayProxyEventV2): boolean {
+  const expected = process.env.SESSION_TOKEN;
+  if (!expected) {
+    // Misconfigured server — fail closed.
+    console.error('SESSION_TOKEN env var is not configured');
+    return true;
+  }
+  const headers = event.headers ?? {};
+  // API Gateway lowercases header names, but be defensive.
+  const raw = headers.authorization ?? headers.Authorization ?? '';
+  if (typeof raw !== 'string') return true;
+  const m = raw.match(/^Bearer\s+(.+)$/i);
+  if (!m) return true;
+  return !constantTimeEqual(m[1].trim(), expected);
+}
 
 // Singleton client — Lambda re-uses across warm invocations.
 const bedrock = new BedrockRuntimeClient({ region: REGION });
@@ -192,6 +222,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   // Preflight (HTTP API typically handles CORS itself, but be defensive).
   if (event.requestContext?.http?.method === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
+  }
+
+  if (isUnauthorized(event as APIGatewayProxyEventV2)) {
+    return response(401, { error: 'Unauthorized', fallback: { action: 'unknown' } });
   }
 
   const body = parseBody(event as APIGatewayProxyEventV2);

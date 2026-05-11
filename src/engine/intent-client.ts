@@ -27,27 +27,39 @@ export function buildContext(
 const ENDPOINT = '/api/parse-intent';
 const TIMEOUT_MS = 5000;
 
+export interface ParseIntentResult {
+  action: ParsedAction;
+  /** True when the server returned 401 — caller should force re-auth. */
+  unauthorized?: boolean;
+}
+
 export async function parseIntentRemote(
   input: string,
   context: IntentContext,
-): Promise<ParsedAction> {
+  token: string | null,
+): Promise<ParseIntentResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ input, context }),
       signal: controller.signal,
     });
-    if (!res.ok) return { action: 'unknown' };
+    if (res.status === 401) {
+      return { action: { action: 'unknown' }, unauthorized: true };
+    }
+    if (!res.ok) return { action: { action: 'unknown' } };
     const json = (await res.json()) as Partial<ParsedAction> & { fallback?: ParsedAction };
-    if (json.fallback) return json.fallback;
-    if (typeof json.action !== 'string') return { action: 'unknown' };
-    return { action: json.action, target: json.target };
+    if (json.fallback) return { action: json.fallback };
+    if (typeof json.action !== 'string') return { action: { action: 'unknown' } };
+    return { action: { action: json.action, target: json.target } };
   } catch {
-    return { action: 'unknown' };
+    return { action: { action: 'unknown' } };
   } finally {
     clearTimeout(timer);
   }

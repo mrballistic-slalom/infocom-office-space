@@ -21,6 +21,12 @@ const __dirname = path.dirname(__filename);
 //   aws bedrock list-inference-profiles --region us-west-2
 const BEDROCK_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
+// Shared session token issued by /api/auth and validated by /api/parse-intent.
+// Override at deploy time: `SESSION_TOKEN=$(openssl rand -hex 32) npx cdk deploy`.
+// Default is a stable string so dev sessions persist across deploys when unset.
+const SESSION_TOKEN = process.env.SESSION_TOKEN ?? 'initech-default-session-token-rotate-me';
+const APP_PASSWORD = process.env.APP_PASSWORD ?? '***REDACTED***';
+
 export class InitechTerminalStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -52,6 +58,7 @@ export class InitechTerminalStack extends Stack {
       timeout: Duration.seconds(10),
       environment: {
         BEDROCK_MODEL_ID,
+        SESSION_TOKEN,
       },
       bundling: {
         format: OutputFormat.ESM,
@@ -93,6 +100,39 @@ export class InitechTerminalStack extends Stack {
       path: '/api/parse-intent',
       methods: [HttpMethod.POST],
       integration: new HttpLambdaIntegration('IntentLambdaIntegration', intentFn),
+    });
+
+    // ---------------------------------------------------------------
+    // Auth Lambda — server-side password check so the literal never ships in the SPA
+    // bundle. The password is set via `APP_PASSWORD` env (default '***REDACTED***'). Override
+    // at deploy time with `APP_PASSWORD=otherword npx cdk deploy`. Note: this still
+    // doesn't lock /api/parse-intent — anyone who calls it directly can use the LLM.
+    // ---------------------------------------------------------------
+    const authFn = new NodejsFunction(this, 'AuthFn', {
+      entry: path.join(__dirname, '../../lambda/src/auth.ts'),
+      projectRoot: path.join(__dirname, '../../lambda'),
+      depsLockFilePath: path.join(__dirname, '../../lambda/package-lock.json'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      memorySize: 256,
+      timeout: Duration.seconds(5),
+      environment: {
+        APP_PASSWORD,
+        SESSION_TOKEN,
+      },
+      bundling: {
+        format: OutputFormat.ESM,
+        target: 'node20',
+        minify: true,
+        sourceMap: true,
+        externalModules: ['@aws-sdk/*'],
+      },
+    });
+
+    httpApi.addRoutes({
+      path: '/api/auth',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('AuthLambdaIntegration', authFn),
     });
 
     // ---------------------------------------------------------------
