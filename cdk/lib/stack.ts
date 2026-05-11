@@ -21,11 +21,29 @@ const __dirname = path.dirname(__filename);
 //   aws bedrock list-inference-profiles --region us-west-2
 const BEDROCK_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
-// Shared session token issued by /api/auth and validated by /api/parse-intent.
-// Override at deploy time: `SESSION_TOKEN=$(openssl rand -hex 32) npx cdk deploy`.
-// Default is a stable string so dev sessions persist across deploys when unset.
-const SESSION_TOKEN = process.env.SESSION_TOKEN ?? 'initech-default-session-token-rotate-me';
-const APP_PASSWORD = process.env.APP_PASSWORD ?? '***REDACTED***';
+/**
+ * Hard-fail at synth time if a required secret env var is missing. No defaults —
+ * a literal default in source would be committed and become a public credential.
+ *
+ * Deploy with:
+ *   APP_PASSWORD=<your-password> JWT_SECRET=$(openssl rand -hex 32) npx cdk deploy
+ *
+ * For CI that only runs `cdk synth` (no real secrets needed), set placeholder
+ * values; deploy will pick up the real ones from the operator's environment.
+ */
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v || v.trim().length === 0) {
+    throw new Error(
+      `Missing required env var: ${name}.\n` +
+        `Deploy example: APP_PASSWORD=<pw> JWT_SECRET=$(openssl rand -hex 32) npx cdk deploy`,
+    );
+  }
+  return v;
+}
+
+const APP_PASSWORD = requireEnv('APP_PASSWORD');
+const JWT_SECRET = requireEnv('JWT_SECRET');
 
 export class InitechTerminalStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -58,7 +76,7 @@ export class InitechTerminalStack extends Stack {
       timeout: Duration.seconds(10),
       environment: {
         BEDROCK_MODEL_ID,
-        SESSION_TOKEN,
+        JWT_SECRET,
       },
       bundling: {
         format: OutputFormat.ESM,
@@ -118,7 +136,7 @@ export class InitechTerminalStack extends Stack {
       timeout: Duration.seconds(5),
       environment: {
         APP_PASSWORD,
-        SESSION_TOKEN,
+        JWT_SECRET,
       },
       bundling: {
         format: OutputFormat.ESM,

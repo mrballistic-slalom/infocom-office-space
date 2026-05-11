@@ -108,8 +108,15 @@ Deploy:
 # from repo root
 npm run build              # produces dist/
 cd cdk && npm install
+
+# Required env vars — the stack will refuse to synth without them.
+export APP_PASSWORD='***REDACTED***'                       # or whatever you want
+export JWT_SECRET=$(openssl rand -hex 32)          # high-entropy, rotate to invalidate sessions
+
 npm run deploy             # cdk deploy
 ```
+
+**Auth model:** `/api/auth` validates `APP_PASSWORD` (constant-time, case-sensitive, trim only) and issues a 24-hour HS256 JWT. `/api/parse-intent` requires `Authorization: Bearer <jwt>` and rejects expired/forged tokens. Rotating `JWT_SECRET` and redeploying invalidates all outstanding sessions.
 
 The stack outputs `CloudFrontDomain` — open `https://<that-domain>/` and the game runs against a same-origin `/api/*` proxy to Lambda+Bedrock.
 

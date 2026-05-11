@@ -7,6 +7,7 @@ import {
   BedrockRuntimeClient,
   InvokeModelCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { verifyJwt } from './jwt';
 
 const REGION = process.env.AWS_REGION ?? 'us-west-2';
 const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'us.anthropic.claude-haiku-4-5';
@@ -43,25 +44,16 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST,OPTIONS',
 };
 
-/** Constant-time equality (avoid early-exit timing leak). */
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
-
 /**
- * Validates the `Authorization: Bearer <token>` header against the SESSION_TOKEN env var.
- * Returns true if the token is missing/wrong; the caller should short-circuit to 401.
+ * Validates the `Authorization: Bearer <JWT>` header. Returns true if the token is
+ * missing, malformed, signature-bad, or expired — caller should short-circuit to 401.
+ * Tokens are HS256-signed JWTs minted by the auth Lambda with a shared JWT_SECRET.
  */
 function isUnauthorized(event: APIGatewayProxyEventV2): boolean {
-  const expected = process.env.SESSION_TOKEN;
-  if (!expected) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
     // Misconfigured server — fail closed.
-    console.error('SESSION_TOKEN env var is not configured');
+    console.error('JWT_SECRET env var is not configured');
     return true;
   }
   const headers = event.headers ?? {};
@@ -70,7 +62,8 @@ function isUnauthorized(event: APIGatewayProxyEventV2): boolean {
   if (typeof raw !== 'string') return true;
   const m = raw.match(/^Bearer\s+(.+)$/i);
   if (!m) return true;
-  return !constantTimeEqual(m[1].trim(), expected);
+  const { valid } = verifyJwt(m[1].trim(), secret);
+  return !valid;
 }
 
 // Singleton client — Lambda re-uses across warm invocations.

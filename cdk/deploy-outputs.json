@@ -1,7 +1,0 @@
-{
-  "InitechTerminalStack": {
-    "IntentApiEndpoint": "https://zpau77sju2.execute-api.us-west-2.amazonaws.com",
-    "SiteBucketName": "initechterminalstack-sitebucket397a1860-bqhaui4j4p5l",
-    "CloudFrontDomain": "d2kcvhxl5n6iqc.cloudfront.net"
-  }
-}

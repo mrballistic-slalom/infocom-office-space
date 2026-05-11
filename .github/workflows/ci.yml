@@ -61,4 +61,10 @@ jobs:
 
       - name: cdk synth
         working-directory: cdk
+        # Placeholder values — real deploys must export both vars themselves.
+        # APP_PASSWORD and JWT_SECRET are required at synth time so the stack
+        # cannot accidentally ship with hardcoded credentials.
+        env:
+          APP_PASSWORD: ci-synth-placeholder
+          JWT_SECRET: ci-synth-placeholder-jwt-secret-not-used
         run: npx cdk synth --quiet

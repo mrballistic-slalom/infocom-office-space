@@ -3,6 +3,8 @@ import type {
   APIGatewayProxyHandlerV2,
   APIGatewayProxyStructuredResultV2,
 } from 'aws-lambda';
+import { timingSafeEqual } from 'node:crypto';
+import { signJwt } from './jwt';
 
 interface AuthRequest {
   password?: unknown;
@@ -12,6 +14,9 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
+
+// 24-hour session token. Adjust at deploy time if you want shorter/longer.
+const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
 function response(
   statusCode: number,
@@ -37,23 +42,21 @@ function parseBody(event: APIGatewayProxyEventV2): unknown {
 }
 
 /**
- * Constant-time string equality. Cheap, but avoids leaking length via early-exit on
- * the first mismatched byte — defense against trivially timing the right password.
+ * Constant-time, length-aware string equality on the byte representation.
+ * Uses Node's timingSafeEqual under the hood.
  */
 function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
+  const ab = Buffer.from(a, 'utf-8');
+  const bb = Buffer.from(b, 'utf-8');
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const expected = process.env.APP_PASSWORD;
-  const sessionToken = process.env.SESSION_TOKEN;
-  if (!expected || !sessionToken) {
-    console.error('APP_PASSWORD or SESSION_TOKEN env var is not configured');
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!expected || !jwtSecret) {
+    console.error('APP_PASSWORD or JWT_SECRET env var is not configured');
     return response(500, { ok: false, error: 'Server misconfigured' });
   }
 
@@ -62,16 +65,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return response(400, { ok: false, error: 'Invalid request body' });
   }
   const req = body as AuthRequest;
-  const guess = typeof req.password === 'string' ? req.password.trim().toLowerCase() : '';
+  // Trim only — do NOT lowercase. The previous lowercase pass shrank the keyspace
+  // and made the gate trivially guessable with a dictionary-word default.
+  const guess = typeof req.password === 'string' ? req.password.trim() : '';
   if (!guess) {
     return response(400, { ok: false, error: 'Missing password' });
   }
 
-  if (!constantTimeEqual(guess, expected.toLowerCase())) {
+  if (!constantTimeEqual(guess, expected)) {
     return response(401, { ok: false });
   }
 
-  // On success, hand out the shared session token. Frontend sends it back as
-  // `Authorization: Bearer <token>` on every /api/parse-intent call.
-  return response(200, { ok: true, token: sessionToken });
+  // Mint a fresh, per-session, expiring JWT. Every successful auth gets its own
+  // jti and exp — there is no static shared bearer token.
+  const token = signJwt(jwtSecret, TOKEN_TTL_SECONDS);
+  return response(200, { ok: true, token, expiresIn: TOKEN_TTL_SECONDS });
 };

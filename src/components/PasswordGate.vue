@@ -66,9 +66,6 @@ const deniedMessage = computed(() => {
       <div class="gate-hint">
         Unauthorized access is logged and reported to Bill Lumbergh.
       </div>
-      <div class="gate-hint subtle">
-        (hint: the soft-spoken gentleman in the break room)
-      </div>
 
       <form class="gate-form" @submit.prevent="onSubmit">
         <span class="gate-prompt">PASSWORD:</span>

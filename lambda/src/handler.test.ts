@@ -1,7 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 
-const sendMock = vi.fn();
+const TEST_JWT_SECRET = 'unit-test-jwt-secret-long-enough';
+process.env.JWT_SECRET = TEST_JWT_SECRET;
+
+// vi.hoisted ensures sendMock exists when the hoisted vi.mock factory runs
+// (mock factories execute before top-level const declarations).
+const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', () => {
   class BedrockRuntimeClient {
@@ -18,15 +23,24 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => {
 
 // Imported AFTER the mock above so the handler picks up the mocked client.
 import { handler } from './handler.js';
+import { signJwt } from './jwt.js';
 
-function makeEvent(body: unknown, opts: { base64?: boolean } = {}): APIGatewayProxyEventV2 {
+const validToken = (): string => signJwt(TEST_JWT_SECRET, 60);
+
+function makeEvent(
+  body: unknown,
+  opts: { base64?: boolean; auth?: string | null } = {},
+): APIGatewayProxyEventV2 {
   const raw = typeof body === 'string' ? body : JSON.stringify(body);
+  const authHeader = opts.auth === undefined ? `Bearer ${validToken()}` : opts.auth;
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (authHeader) headers.authorization = authHeader;
   return {
     version: '2.0',
     routeKey: 'POST /api/parse-intent',
     rawPath: '/api/parse-intent',
     rawQueryString: '',
-    headers: { 'content-type': 'application/json' },
+    headers,
     requestContext: {
       accountId: 'test',
       apiId: 'test',
@@ -164,5 +178,51 @@ describe('parse-intent handler', () => {
     const res = await invoke(makeEvent({ input: 'look', context: makeContext() }));
     expect(res.headers['Content-Type']).toBe('application/json');
     expect(res.headers['Access-Control-Allow-Origin']).toBe('*');
+  });
+
+  describe('JWT authorization', () => {
+    it('returns 401 when no Authorization header is present', async () => {
+      const res = await invoke(
+        makeEvent({ input: 'look', context: makeContext() }, { auth: null }),
+      );
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 when token signature is invalid', async () => {
+      const { signJwt: realSign } = await import('./jwt');
+      const wrong = realSign('different-secret-not-the-real-one', 60);
+      const res = await invoke(
+        makeEvent({ input: 'look', context: makeContext() }, { auth: `Bearer ${wrong}` }),
+      );
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 when token is expired', async () => {
+      const { signJwt: realSign } = await import('./jwt');
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const t = realSign(TEST_JWT_SECRET, 10);
+      vi.setSystemTime(new Date('2026-01-01T00:00:11Z'));
+      const res = await invoke(
+        makeEvent({ input: 'look', context: makeContext() }, { auth: `Bearer ${t}` }),
+      );
+      expect(res.statusCode).toBe(401);
+      vi.useRealTimers();
+    });
+
+    it('returns 401 when Authorization header is malformed', async () => {
+      const res = await invoke(
+        makeEvent({ input: 'look', context: makeContext() }, { auth: 'NotBearer xyz' }),
+      );
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 when JWT_SECRET env var is missing (fail closed)', async () => {
+      const prev = process.env.JWT_SECRET;
+      delete process.env.JWT_SECRET;
+      const res = await invoke(makeEvent({ input: 'look', context: makeContext() }));
+      expect(res.statusCode).toBe(401);
+      process.env.JWT_SECRET = prev;
+    });
   });
 });
