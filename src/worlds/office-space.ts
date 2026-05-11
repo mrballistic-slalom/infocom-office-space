@@ -73,12 +73,18 @@ export const officeSpace: World = {
     initech_parking: {
       name: 'Initech Parking Lot',
       description:
-        'Initech. A four-story beige cube wrapped in mirrored glass, the architectural equivalent of a status report. The lobby is straight ahead.',
+        'Initech. A four-story beige cube wrapped in mirrored glass, the architectural equivalent of a status report. The lobby is straight ahead. Your car waits behind you — you could drive somewhere else if Initech is not where you want to be right now.',
       exits: {
         lobby: 'initech_lobby',
         enter: 'initech_lobby',
         in: 'initech_lobby',
         north: 'initech_lobby',
+        drive: 'parking_lot',
+        home: 'parking_lot',
+        apartment: 'parking_lot',
+        therapist: 'hypnotherapist',
+        hypnotist: 'hypnotherapist',
+        shrink: 'hypnotherapist',
       },
       items: [],
       npcs: [],
