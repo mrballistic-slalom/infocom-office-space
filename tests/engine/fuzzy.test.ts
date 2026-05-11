@@ -101,3 +101,39 @@ describe('fuzzyMatchExit', () => {
     expect(fuzzyMatchExit('xyzzy', exits)).toBeNull();
   });
 });
+
+describe('fuzzy token-prefix matching', () => {
+  it('resolves a token-prefix exit ("cube farm" → "cubicle_farm")', () => {
+    const exits = {
+      cubicles: 'cubicle_farm',
+      cubicle_farm: 'cubicle_farm',
+      break_room: 'break_room',
+      east: 'cubicle_farm',
+    };
+    // "cube" matches "cubicle" (prefix) AND "farm" matches "farm" → cubicle_farm scores 2.
+    expect(fuzzyMatchExit('cube farm', exits)).toBe('cubicle_farm');
+  });
+
+  it('resolves a single-token prefix exit ("brk" too short, "brea" → "break_room")', () => {
+    const exits = { break_room: 'break_room', east: 'commute' };
+    expect(fuzzyMatchExit('brea', exits)).toBe('break_room');
+  });
+
+  it('still returns null for a non-direction needle with zero token overlap', () => {
+    const exits = { lobby: 'initech_lobby', break_room: 'break_room' };
+    expect(fuzzyMatchExit('mordor', exits)).toBeNull();
+  });
+
+  it('strict directions remain immune to token-prefix matching', () => {
+    const exits = { outside: 'parking_lot', east: 'commute' };
+    expect(fuzzyMatchExit('south', exits)).toBeNull();
+  });
+
+  it('fuzzyMatch token-prefix resolves item names ("swing" → "red Swingline stapler")', () => {
+    const candidates = [
+      { id: 'red_stapler', name: 'red Swingline stapler' },
+      { id: 'tps_reports', name: 'TPS reports' },
+    ];
+    expect(fuzzyMatch('swing', candidates)).toBe('red_stapler');
+  });
+});

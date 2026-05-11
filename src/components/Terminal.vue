@@ -13,6 +13,14 @@ const inputEl = ref<HTMLInputElement | null>(null);
 const scrollEl = ref<HTMLDivElement | null>(null);
 const inputValue = ref('');
 
+// Shell-style command history. history[0] is the OLDEST entry; history.at(-1) is the newest.
+// historyIndex: null = editing a fresh line; otherwise the index into `history` currently shown.
+const history = ref<string[]>([]);
+const historyIndex = ref<number | null>(null);
+// Preserve the user's in-progress draft when they start arrowing through history.
+let draft = '';
+const HISTORY_LIMIT = 100;
+
 // How many lines from `output` have already been enqueued to the typewriter.
 let enqueuedCount = 0;
 
@@ -59,6 +67,15 @@ async function onSubmit(): Promise<void> {
     return;
   }
   inputValue.value = '';
+  // Push into history (dedupe consecutive duplicates) and reset cursor.
+  if (history.value.at(-1) !== v) {
+    history.value.push(v);
+    if (history.value.length > HISTORY_LIMIT) {
+      history.value.splice(0, history.value.length - HISTORY_LIMIT);
+    }
+  }
+  historyIndex.value = null;
+  draft = '';
   await store.submit(v);
 }
 
@@ -66,8 +83,43 @@ function onShellClick(): void {
   focusInput();
 }
 
+function recallHistory(direction: 'up' | 'down'): void {
+  if (history.value.length === 0) return;
+  if (direction === 'up') {
+    if (historyIndex.value === null) {
+      // First step back — stash the in-progress draft so DOWN can restore it.
+      draft = inputValue.value;
+      historyIndex.value = history.value.length - 1;
+    } else if (historyIndex.value > 0) {
+      historyIndex.value -= 1;
+    }
+    inputValue.value = history.value[historyIndex.value];
+  } else {
+    if (historyIndex.value === null) return;
+    if (historyIndex.value < history.value.length - 1) {
+      historyIndex.value += 1;
+      inputValue.value = history.value[historyIndex.value];
+    } else {
+      // Past the newest entry — restore the draft and exit history mode.
+      historyIndex.value = null;
+      inputValue.value = draft;
+    }
+  }
+}
+
 function onKeydown(e: KeyboardEvent): void {
-  // Any non-control key flushes if typing.
+  // Arrow keys recall history regardless of typewriter state — and never flush.
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    recallHistory('up');
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    recallHistory('down');
+    return;
+  }
+  // Any other printable key flushes if typing.
   if (typer.isTyping.value && e.key.length === 1) {
     typer.flush();
   }
