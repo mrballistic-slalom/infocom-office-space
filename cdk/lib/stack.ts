@@ -1,6 +1,7 @@
-import { Stack, type StackProps, Duration, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
+import { Stack, type StackProps, Duration, RemovalPolicy, CfnOutput, Fn } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -33,40 +34,14 @@ export class InitechTerminalStack extends Stack {
     });
 
     // ---------------------------------------------------------------
-    // CloudFront distribution with Origin Access Control (OAC, not legacy OAI).
-    // S3BucketOrigin.withOriginAccessControl wires the OAC + bucket policy automatically.
-    // ---------------------------------------------------------------
-    const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-        compress: true,
-      },
-      defaultRootObject: 'index.html',
-      // SPA routing — let the client router handle deep links.
-      errorResponses: [
-        {
-          httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: Duration.minutes(5),
-        },
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: Duration.minutes(5),
-        },
-      ],
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
-    });
-
-    // ---------------------------------------------------------------
     // Intent parser Lambda. NodejsFunction handles esbuild bundling of the TS source.
     // ---------------------------------------------------------------
     const intentFn = new NodejsFunction(this, 'IntentParserFn', {
       entry: path.join(__dirname, '../../lambda/src/handler.ts'),
+      // Pin both projectRoot and the lock file to lambda/ so NodejsFunction doesn't try
+      // to root the bundle inside cdk/ (entry would be outside projectRoot otherwise).
+      projectRoot: path.join(__dirname, '../../lambda'),
+      depsLockFilePath: path.join(__dirname, '../../lambda/package-lock.json'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 512,
@@ -99,7 +74,6 @@ export class InitechTerminalStack extends Stack {
 
     // ---------------------------------------------------------------
     // HTTP API (API Gateway v2) — single POST /api/parse-intent route.
-    // apigatewayv2 + apigatewayv2-integrations are GA in aws-cdk-lib >=2.170 (no alpha needed).
     // ---------------------------------------------------------------
     const httpApi = new HttpApi(this, 'IntentApi', {
       apiName: 'initech-intent-api',
@@ -118,6 +92,67 @@ export class InitechTerminalStack extends Stack {
     });
 
     // ---------------------------------------------------------------
+    // CloudFront distribution. The default behavior serves the SPA from S3 via OAC.
+    // The /api/* behavior proxies to API Gateway so the frontend can fetch a same-origin
+    // /api/parse-intent without CORS preflight surprises.
+    // ---------------------------------------------------------------
+    // HttpApi.apiEndpoint is `https://{apiId}.execute-api.{region}.amazonaws.com` — we
+    // need just the host for HttpOrigin.
+    const apiHost = Fn.select(2, Fn.split('/', httpApi.apiEndpoint));
+
+    const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        compress: true,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: new origins.HttpOrigin(apiHost, {
+            protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          // AllViewerExceptHostHeader keeps the request's Host header out of the upstream
+          // call (API Gateway rejects mismatched Host headers), forwarding everything else.
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          compress: true,
+        },
+      },
+      defaultRootObject: 'index.html',
+      // SPA routing — let the client router handle deep links.
+      errorResponses: [
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+          ttl: Duration.minutes(5),
+        },
+        {
+          httpStatus: 404,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+          ttl: Duration.minutes(5),
+        },
+      ],
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    });
+
+    // ---------------------------------------------------------------
+    // Upload the SPA build to S3 and invalidate CloudFront on every deploy.
+    // The Vite build must have already produced ../../dist before `cdk deploy` runs.
+    // ---------------------------------------------------------------
+    new s3deploy.BucketDeployment(this, 'SiteDeployment', {
+      sources: [s3deploy.Source.asset(path.join(__dirname, '../../dist'))],
+      destinationBucket: siteBucket,
+      distribution,
+      distributionPaths: ['/*'],
+      prune: true,
+    });
+
+    // ---------------------------------------------------------------
     // Outputs
     // ---------------------------------------------------------------
     new CfnOutput(this, 'SiteBucketName', {
@@ -126,11 +161,11 @@ export class InitechTerminalStack extends Stack {
     });
     new CfnOutput(this, 'CloudFrontDomain', {
       value: distribution.distributionDomainName,
-      description: 'CloudFront distribution domain',
+      description: 'CloudFront distribution domain (your public URL)',
     });
     new CfnOutput(this, 'IntentApiEndpoint', {
       value: httpApi.apiEndpoint,
-      description: 'HTTP API endpoint (POST /api/parse-intent)',
+      description: 'HTTP API endpoint (proxied via CloudFront /api/*)',
     });
   }
 }

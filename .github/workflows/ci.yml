@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (type-check / test / build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test (with coverage thresholds)
+        run: npm run test:coverage
+
+      - name: Build production bundle
+        run: npm run build
+
+  cdk-synth:
+    name: CDK (synth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cdk/package-lock.json
+
+      - name: Install CDK dependencies
+        working-directory: cdk
+        run: npm ci
+
+      - name: Install Lambda dependencies (needed for NodejsFunction bundling)
+        working-directory: lambda
+        run: npm ci
+
+      - name: Install root dependencies (frontend build for BucketDeployment asset)
+        run: npm ci
+
+      - name: Build SPA (BucketDeployment expects dist/)
+        run: npm run build
+
+      - name: cdk synth
+        working-directory: cdk
+        run: npx cdk synth --quiet
