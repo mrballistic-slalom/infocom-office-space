@@ -1,88 +1,143 @@
-// Minimal Google Analytics 4 wrapper.
+// Direct GA4 Measurement Protocol — no gtag.js, no GTM, no consent state.
+// We construct /g/collect URLs ourselves and fire them via sendBeacon.
 //
-// - The measurement ID is read from import.meta.env.VITE_GA_MEASUREMENT_ID at
-//   build time (see .env.production). If unset (or matches the placeholder),
-//   gtag is never loaded — handy for local dev.
-// - If the browser signals Do-Not-Track, we also skip loading gtag entirely.
-// - Once loaded, gtag fires an automatic page_view on `config`. Custom events
-//   go through track().
-
-declare global {
-  interface Window {
-    dataLayer?: unknown[];
-    gtag?: (...args: unknown[]) => void;
-  }
-}
+// Why direct: gtag.js loads but silently refuses to transmit on this property
+// despite consent being granted. After exhaustive debugging the simplest fix
+// was to drop gtag entirely. We lose Enhanced Measurement (auto scroll /
+// outbound click / video tracking) but gain deterministic, debuggable sends.
+//
+// What we still get:
+// - page_view fired on init with the real document.title and location
+// - track('event_name', { … }) for custom events (game_start etc.)
+// - Persistent client_id stored in localStorage (one per browser)
+// - Per-tab session_id stored in sessionStorage (resets on tab close)
+// - DNT honored — if navigator.doNotTrack === '1' we send nothing
+// - Silent fallback to <img> GET if sendBeacon fails or isn't available
 
 const RAW_ID = import.meta.env.VITE_GA_MEASUREMENT_ID;
 const MEASUREMENT_ID =
   typeof RAW_ID === 'string' && RAW_ID && !RAW_ID.startsWith('G-XXX') ? RAW_ID : null;
 
+const ENDPOINT = 'https://www.google-analytics.com/g/collect';
+const CLIENT_ID_KEY = 'initech-terminal:ga-cid';
+const SESSION_ID_KEY = 'initech-terminal:ga-sid';
+
 let initialized = false;
 
 function dntEnabled(): boolean {
   if (typeof navigator === 'undefined') return false;
-  // Both the standard property and the older MS variant.
   const nav = navigator as Navigator & { msDoNotTrack?: string };
   return nav.doNotTrack === '1' || nav.msDoNotTrack === '1';
 }
 
-function injectGtag(id: string): void {
-  const s = document.createElement('script');
-  s.async = true;
-  s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
-  document.head.appendChild(s);
+/** Stable per-browser identifier. GA expects the form `<random>.<unix-seconds>`. */
+function getOrCreateClientId(): string {
+  try {
+    const existing = window.localStorage.getItem(CLIENT_ID_KEY);
+    if (existing) return existing;
+    const cid = `${Math.floor(Math.random() * 1e10)}.${Math.floor(Date.now() / 1000)}`;
+    window.localStorage.setItem(CLIENT_ID_KEY, cid);
+    return cid;
+  } catch {
+    // localStorage unavailable (private mode / quota) — fall back to per-call random.
+    return `ephemeral.${Math.floor(Date.now() / 1000)}`;
+  }
+}
 
-  window.dataLayer = window.dataLayer ?? [];
-  // gtag is canonically defined as a thin wrapper that pushes arguments onto
-  // dataLayer; the gtag.js loader picks them up once it's parsed.
-  window.gtag = function gtag(...args: unknown[]): void {
-    window.dataLayer!.push(args);
-  };
-  // Default consent to granted before config so events aren't held in queue.
-  // (Required when GA4's "Default behavior in unspecified regions" is set to
-  // denied — a now-common default in 2024+.) DNT is already honored above.
-  window.gtag('consent', 'default', {
-    ad_storage: 'granted',
-    analytics_storage: 'granted',
-    ad_user_data: 'granted',
-    ad_personalization: 'granted',
-    functionality_storage: 'granted',
-    personalization_storage: 'granted',
-    security_storage: 'granted',
-  });
-  window.gtag('js', new Date());
-  window.gtag('config', id);
+/** Per-tab session id. Cleared when the tab closes; that's the desired semantic. */
+function getOrCreateSessionId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(SESSION_ID_KEY);
+    if (existing) return existing;
+    const sid = String(Math.floor(Date.now() / 1000));
+    window.sessionStorage.setItem(SESSION_ID_KEY, sid);
+    return sid;
+  } catch {
+    return String(Math.floor(Date.now() / 1000));
+  }
+}
+
+interface SendOptions {
+  /** Set when this is the first event of the session (engagement). */
+  isFirstHit?: boolean;
+}
+
+function send(name: string, params: Record<string, unknown> = {}, opts: SendOptions = {}): void {
+  if (!MEASUREMENT_ID) return;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  if (dntEnabled()) return;
+
+  const cid = getOrCreateClientId();
+  const sid = getOrCreateSessionId();
+
+  const url = new URL(ENDPOINT);
+  url.searchParams.set('v', '2');
+  url.searchParams.set('tid', MEASUREMENT_ID);
+  url.searchParams.set('cid', cid);
+  url.searchParams.set('sid', sid);
+  url.searchParams.set('en', name);
+  url.searchParams.set('dl', window.location.href);
+  url.searchParams.set('dt', document.title);
+  if (document.referrer) url.searchParams.set('dr', document.referrer);
+  url.searchParams.set('ul', navigator.language || 'en');
+  url.searchParams.set('sr', `${window.screen.width}x${window.screen.height}`);
+  if (opts.isFirstHit) url.searchParams.set('_fv', '1');
+  // _s is a sequence number; GA4 expects an increasing value per session. A
+  // monotonic timestamp is fine.
+  url.searchParams.set('_s', String(Date.now()));
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'number') {
+      url.searchParams.set(`epn.${key}`, String(value));
+    } else {
+      url.searchParams.set(`ep.${key}`, String(value));
+    }
+  }
+
+  const finalUrl = url.toString();
+  try {
+    if (typeof navigator.sendBeacon === 'function') {
+      const ok = navigator.sendBeacon(finalUrl);
+      if (ok) return;
+    }
+  } catch {
+    // fall through to image fallback
+  }
+  // Last-resort transport — works in every browser.
+  new Image().src = finalUrl;
 }
 
 /**
- * Initialize analytics once. Safe to call multiple times.
- * Returns true if gtag was loaded, false if skipped.
+ * Initialize analytics once per page. Fires the initial page_view immediately.
+ * Returns true if a real send was attempted, false if skipped (no ID, DNT, etc).
  */
 export function initAnalytics(): boolean {
-  if (initialized) return Boolean(window.gtag);
+  if (initialized) return Boolean(MEASUREMENT_ID);
   initialized = true;
   if (!MEASUREMENT_ID) return false;
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  if (typeof window === 'undefined') return false;
   if (dntEnabled()) return false;
-  injectGtag(MEASUREMENT_ID);
+  // _fv=1 (first visit) signals GA to also emit first_visit/session_start.
+  send('page_view', {}, { isFirstHit: true });
   return true;
 }
 
 /**
- * Fire a custom GA4 event. No-op when gtag isn't loaded — callers don't need
- * to guard.
+ * Fire a custom GA4 event. Safe no-op when the measurement ID is unset
+ * or DNT is on.
  */
 export function track(event: string, params?: Record<string, unknown>): void {
-  if (typeof window === 'undefined' || !window.gtag) return;
-  window.gtag('event', event, params ?? {});
+  send(event, params ?? {});
 }
 
-/** For tests — reset the module-internal state. */
+/** Test seam — resets module state and clears the persistent IDs. */
 export function __resetForTests(): void {
   initialized = false;
-  if (typeof window !== 'undefined') {
-    delete window.gtag;
-    delete window.dataLayer;
+  try {
+    window.localStorage.removeItem(CLIENT_ID_KEY);
+    window.sessionStorage.removeItem(SESSION_ID_KEY);
+  } catch {
+    /* ignore */
   }
 }

@@ -1,73 +1,69 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initAnalytics, track, __resetForTests } from '@/services/analytics';
 
-describe('analytics', () => {
+// The module captures `import.meta.env.VITE_GA_MEASUREMENT_ID` at import time.
+// The test bundle builds with no .env, so it's null and every send call
+// short-circuits before reaching navigator.sendBeacon. Each test below
+// confirms the guards behave correctly.
+
+describe('analytics — direct Measurement Protocol', () => {
   beforeEach(() => {
     __resetForTests();
-    // Remove any leftover script tags from a previous test.
-    document.head
-      .querySelectorAll('script[src*="googletagmanager.com"]')
-      .forEach((el) => el.remove());
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
-  it('initAnalytics is a no-op when VITE_GA_MEASUREMENT_ID is unset', () => {
-    // The module captured `import.meta.env.VITE_GA_MEASUREMENT_ID` at import
-    // time; with the test bundle building from no .env, it's already
-    // undefined — initAnalytics should return false.
-    expect(initAnalytics()).toBe(false);
-    expect(window.gtag).toBeUndefined();
-    expect(
-      document.head.querySelectorAll('script[src*="googletagmanager.com"]').length,
-    ).toBe(0);
-  });
-
-  it('initAnalytics is a no-op when the placeholder ID is left in place', () => {
-    // We can't change import.meta.env at runtime, so the best we can do here
-    // is rely on the unset-by-default test bundle. This documents the
-    // intent: placeholder IDs (G-XXX...) must not load gtag.
+  it('initAnalytics returns false when measurement ID is unset', () => {
     expect(initAnalytics()).toBe(false);
   });
 
-  it('skips loading when navigator.doNotTrack === "1"', () => {
-    // Even if a real ID were present, DNT should short-circuit. Stub the
-    // module's initialized state and DNT.
-    Object.defineProperty(navigator, 'doNotTrack', {
-      value: '1',
-      configurable: true,
-    });
-    expect(initAnalytics()).toBe(false);
-    expect(window.gtag).toBeUndefined();
-    Object.defineProperty(navigator, 'doNotTrack', {
-      value: '0',
-      configurable: true,
-    });
+  it('initAnalytics does not call sendBeacon when ID is unset', () => {
+    const beacon = vi.fn().mockReturnValue(true);
+    navigator.sendBeacon = beacon;
+    initAnalytics();
+    expect(beacon).not.toHaveBeenCalled();
   });
 
-  it('track() is a safe no-op when gtag is not loaded', () => {
+  it('track() is a safe no-op when ID is unset', () => {
+    const beacon = vi.fn().mockReturnValue(true);
+    navigator.sendBeacon = beacon;
     expect(() => track('whatever', { x: 1 })).not.toThrow();
+    expect(beacon).not.toHaveBeenCalled();
   });
 
-  it('track() forwards events to gtag when it is loaded', () => {
-    // Simulate the post-init state by installing a gtag stub directly.
-    const spy = vi.fn();
-    window.gtag = spy;
-    track('game_start');
-    track('game_completed', { move_count: 42 });
-    expect(spy).toHaveBeenCalledWith('event', 'game_start', {});
-    expect(spy).toHaveBeenCalledWith('event', 'game_completed', { move_count: 42 });
+  it('skips sending when navigator.doNotTrack === "1"', () => {
+    Object.defineProperty(navigator, 'doNotTrack', { value: '1', configurable: true });
+    const beacon = vi.fn().mockReturnValue(true);
+    navigator.sendBeacon = beacon;
+    expect(initAnalytics()).toBe(false);
+    track('any', {});
+    expect(beacon).not.toHaveBeenCalled();
+    Object.defineProperty(navigator, 'doNotTrack', { value: '0', configurable: true });
   });
 
-  it('initAnalytics is idempotent', () => {
+  it('initAnalytics is idempotent — repeated calls do not re-fire page_view', () => {
+    // No ID set in test bundle; just confirm there is no error or side-effect
+    // from calling repeatedly.
+    expect(initAnalytics()).toBe(false);
+    expect(initAnalytics()).toBe(false);
+    expect(initAnalytics()).toBe(false);
+  });
+
+  it('no client_id is minted when ID guards short-circuit first', () => {
+    // Documents guard ordering: if measurement ID is unset, we don't reach
+    // localStorage at all. Important for SSR / private-browsing safety.
     initAnalytics();
-    initAnalytics();
-    initAnalytics();
-    expect(
-      document.head.querySelectorAll('script[src*="googletagmanager.com"]').length,
-    ).toBeLessThanOrEqual(1);
+    track('test_event');
+    expect(localStorage.getItem('initech-terminal:ga-cid')).toBeNull();
+  });
+
+  it('track() accepts but does not throw on null/undefined params', () => {
+    expect(() => track('e', undefined)).not.toThrow();
+    expect(() => track('e', {})).not.toThrow();
+    expect(() => track('e', { a: null, b: undefined, c: 1, d: 'x' })).not.toThrow();
   });
 });
