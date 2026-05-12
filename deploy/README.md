@@ -59,6 +59,11 @@ sudo a2ensite initech
 sudo apache2ctl configtest && sudo systemctl reload apache2
 sudo certbot --apache -d initech.mrballistic.com
 
+# certbot's auto-generated initech-le-ssl.conf is sometimes incomplete (drops
+# DocumentRoot/ProxyPass/etc.). Overwrite it with the known-good copy:
+sudo cp deploy/apache-initech-le-ssl.conf /etc/apache2/sites-available/initech-le-ssl.conf
+sudo apache2ctl configtest && sudo systemctl reload apache2
+
 # 5. pm2 systemd boot integration
 sudo cp deploy/pm2-initech.service /etc/systemd/system/
 sudo systemctl daemon-reload
