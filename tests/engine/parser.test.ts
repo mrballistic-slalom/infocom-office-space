@@ -278,5 +278,17 @@ describe('fallbackParse', () => {
     it('parses "press snooze"', () => {
       expect(fallbackParse('press snooze')).toEqual({ action: 'snooze' });
     });
+    it('parses "snooze alarm clock" with the item as target', () => {
+      expect(fallbackParse('snooze alarm clock')).toEqual({
+        action: 'snooze',
+        target: 'alarm clock',
+      });
+    });
+    it('parses "snooze the alarm clock" and strips "the"', () => {
+      expect(fallbackParse('snooze the alarm clock')).toEqual({
+        action: 'snooze',
+        target: 'alarm clock',
+      });
+    });
   });
 });

@@ -27,7 +27,7 @@ const RE = {
   install: /^(?:install|run|load)\s+(?:the\s+)?(.+)$/i,
   sit: /^(?:sit(?:\s+down)?|relax)$/i,
   wait: /^(?:wait|z)$/i,
-  snooze: /^(?:snooze|hit\s+(?:the\s+)?snooze(?:\s+button)?|press\s+snooze)$/i,
+  snooze: /^(?:snooze|hit\s+(?:the\s+)?snooze(?:\s+button)?|press\s+snooze)(?:\s+(?:the\s+)?(.+))?$/i,
 };
 
 const SINGLE_WORD: Record<string, ParsedAction> = {
@@ -73,8 +73,13 @@ export function fallbackParse(rawInput: string): ParsedAction | null {
   if (input in DIRECTIONS) return { action: 'go', target: DIRECTIONS[input] };
   if (RE.driveBare.test(input)) return { action: 'go', target: 'drive' };
   // snooze runs before the verb-pattern loop because "hit" is a smash synonym;
-  // "hit snooze" would otherwise be parsed as smash("snooze").
-  if (RE.snooze.test(input)) return { action: 'snooze' };
+  // "hit snooze" would otherwise be parsed as smash("snooze"). Target is
+  // optional — the handler doesn't need it, but accepting it stops "snooze
+  // alarm clock" from falling all the way through to the LLM.
+  {
+    const m = input.match(RE.snooze);
+    if (m) return { action: 'snooze', target: m[1]?.trim() };
+  }
 
   for (const [re, action] of VERB_PATTERNS) {
     const m = input.match(re);
