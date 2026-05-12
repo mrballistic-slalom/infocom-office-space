@@ -92,6 +92,13 @@ Anything that doesn't match falls through to the LLM, which returns a structured
 
 ## Deployment
 
+Two supported paths:
+
+- **AWS (S3 + CloudFront + Lambda + Bedrock Claude Haiku)** — the original deploy. Steps below.
+- **Self-hosted (Ubuntu + Apache + pm2 + Gemini)** — see [`deploy/README.md`](./deploy/README.md). One long-running Node process (`server/`) with pm2 cluster failover, two workers, zero-downtime reload. Frontend is unchanged between the two.
+
+### AWS deploy
+
 Prerequisites (one-time):
 
 1. **AWS credentials** with permission to create S3, CloudFront, Lambda, API Gateway, IAM.
