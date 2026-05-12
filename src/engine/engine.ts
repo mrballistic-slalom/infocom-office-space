@@ -63,6 +63,7 @@ function labelToFlag(label: string): string | null {
     'has scheme': 'has_scheme',
     'virus installed': 'virus_installed',
     'printer destroyed': 'printer_destroyed',
+    'alarm clock smashed': 'alarm_clock_smashed',
   };
   return map[label] ?? null;
 }
@@ -376,28 +377,97 @@ function handleTalk(target: string | undefined, world: World, state: GameState):
 }
 
 function handleSmash(target: string | undefined, world: World, state: GameState): EngineResult {
-  const inRightRoom = state.currentRoom === 'the_field' || state.currentRoom === 'break_room_post';
-  if (!inRightRoom) {
+  const visibleIds = visibleItemsIn(state.currentRoom, world, state);
+  const candidates = [...visibleIds, ...state.inventory].map((id) => ({
+    id,
+    name: world.items[id]?.name ?? id,
+  }));
+  const itemId = target ? fuzzyMatch(target, candidates) : null;
+  const item = itemId ? world.items[itemId] : null;
+
+  const inEndingRoom =
+    state.currentRoom === 'the_field' || state.currentRoom === 'break_room_post';
+  const hasBat = state.inventory.includes('baseball_bat');
+
+  // Printer ending — bat in hand in the right room. Same chain as before.
+  if (itemId === 'printer' && inEndingRoom && hasBat) {
+    if (state.flags.printer_destroyed) {
+      return { lines: ['The printer is already in pieces. Some of it is in your hair.'], mutated: false };
+    }
+    const lines = [...(world.events.printer_smash ?? [])];
+    applyEventEffects('printer_smash', world, state);
+    state.firedEvents.push('printer_smash');
+    lines.push(...(world.events.game_ending ?? []));
+    applyEventEffects('game_ending', world, state);
+    state.firedEvents.push('game_ending');
+    state.gameOver = true;
+    return { lines, mutated: true };
+  }
+
+  // Printer hand-hurt — anywhere the printer is, no bat. The printer is bolted
+  // to the table; smashing with bare hands just hurts you. After the first try
+  // we taunt instead of replaying the whole bit.
+  if (itemId === 'printer') {
+    if (state.flags.printer_hand_hurt) {
+      return {
+        lines: ['You ball your hand into a fist. It already hurts. The printer is winning.'],
+        mutated: false,
+      };
+    }
+    const lines = [...(world.events.printer_hand_hurt ?? [])];
+    state.flags.printer_hand_hurt = true;
+    return { lines, mutated: true };
+  }
+
+  // Generic onSmash hook — destructible items with their own one-shot event
+  // (alarm clock etc.). Item is removed from the room afterward.
+  if (item?.onSmash) {
+    if (state.firedEvents.includes(item.onSmash)) {
+      return { lines: [`The ${item.name} is already in pieces.`], mutated: false };
+    }
+    const lines = [...(world.events[item.onSmash] ?? [])];
+    applyEventEffects(item.onSmash, world, state);
+    state.firedEvents.push(item.onSmash);
+    const removed = state.itemsRemoved[state.currentRoom] ?? [];
+    if (itemId && !removed.includes(itemId)) removed.push(itemId);
+    state.itemsRemoved[state.currentRoom] = removed;
+    return { lines, mutated: true };
+  }
+
+  // Refusals.
+  if (!inEndingRoom) {
     return { lines: ['Smashing things at work is, somehow, still frowned upon.'], mutated: false };
   }
-  if (!state.inventory.includes('baseball_bat')) {
+  if (!hasBat) {
     return { lines: ['You would need something heavy. A bat, say.'], mutated: false };
   }
   if (target && !/printer|it|that/i.test(target)) {
     return { lines: [`You don't see a "${target}" worth smashing.`], mutated: false };
   }
-  if (state.flags.printer_destroyed) {
-    return { lines: ['The printer is already in pieces. Some of it is in your hair.'], mutated: false };
+  return { lines: ['Nothing happens.'], mutated: false };
+}
+
+function handleSnooze(world: World, state: GameState): EngineResult {
+  // Find the first item in the current room that has an onSnooze hook.
+  const visibleIds = visibleItemsIn(state.currentRoom, world, state);
+  const snoozable = visibleIds
+    .map((id) => ({ id, item: world.items[id] }))
+    .find(({ item }) => item?.onSnooze);
+  if (!snoozable || !snoozable.item?.onSnooze) {
+    if (state.flags.alarm_clock_smashed && state.currentRoom === 'apartment_bedroom') {
+      return {
+        lines: [
+          'You smashed the alarm clock. It is in pieces on the bedside table.',
+          'You will probably oversleep tomorrow. This feels, on balance, fine.',
+        ],
+        mutated: false,
+      };
+    }
+    return { lines: ['There is nothing here to snooze.'], mutated: false };
   }
-  const lines = [...(world.events.printer_smash ?? [])];
-  applyEventEffects('printer_smash', world, state);
-  state.firedEvents.push('printer_smash');
-  // Chain into the ending after a beat.
-  lines.push(...(world.events.game_ending ?? []));
-  applyEventEffects('game_ending', world, state);
-  state.firedEvents.push('game_ending');
-  state.gameOver = true;
-  return { lines, mutated: true };
+  const lines = [...(world.events[snoozable.item.onSnooze] ?? [])];
+  applyEventEffects(snoozable.item.onSnooze, world, state);
+  return { lines, mutated: false };
 }
 
 function handleInstall(target: string | undefined, world: World, state: GameState): EngineResult {
@@ -421,7 +491,8 @@ function handleHelp(): EngineResult {
       'WEAR <item>              Put on a wearable',
       'TALK TO <npc>            Speak with someone (synonyms: ASK)',
       'INVENTORY / I            List what you are carrying',
-      'SMASH <target>           Apply violence (requires a tool)',
+      'SMASH <target>           Apply violence',
+      'SNOOZE                   Hit the snooze button (contextual)',
       'INSTALL <target>         Install (used on server terminal)',
       'SAVE                     Save progress to local terminal memory',
       'LOAD                     Restore last saved game',
@@ -476,6 +547,8 @@ export function execute(
       return handleInventory(world, state);
     case 'smash':
       return handleSmash(action.target, world, state);
+    case 'snooze':
+      return handleSnooze(world, state);
     case 'install':
       return handleInstall(action.target, world, state);
     case 'help':

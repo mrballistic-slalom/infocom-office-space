@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!--
+    1200x630 social-preview card. Most modern OG scrapers (FB, LinkedIn, Slack,
+    Discord, iMessage, Twitter) render SVG fine. If you find one that doesn't,
+    drop a PNG of the same dimensions in public/og-image.png and update the
+    meta tags in index.html.
+  -->
+  <defs>
+    <pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="2" fill="transparent"/>
+      <rect y="2" width="4" height="2" fill="#000000" opacity="0.18"/>
+    </pattern>
+    <radialGradient id="bloom" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#FFB000" stop-opacity="0.10"/>
+      <stop offset="60%" stop-color="#FFB000" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#FFB000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="75%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.65"/>
+    </radialGradient>
+    <filter id="textGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Phosphor background -->
+  <rect width="1200" height="630" fill="#0a0a08"/>
+  <rect width="1200" height="630" fill="url(#bloom)"/>
+
+  <!-- Header bar (mirrors the in-app terminal header) -->
+  <text x="60" y="60" font-family="'VT323',monospace" font-size="22" fill="#FFB000" opacity="0.6" letter-spacing="3">
+    INITECH TERMINAL v4.02
+  </text>
+  <text x="1140" y="60" text-anchor="end" font-family="'VT323',monospace" font-size="22" fill="#FFB000" opacity="0.6" letter-spacing="3">
+    MOVES: 00
+  </text>
+  <line x1="40" y1="80" x2="1160" y2="80" stroke="#332800" stroke-width="1"/>
+
+  <!-- Title block — same banner as the in-game intro -->
+  <text x="600" y="180" text-anchor="middle" font-family="'VT323',monospace" font-size="40" fill="#FFD866" filter="url(#textGlow)" letter-spacing="2">
+    ═══════════════════════════════════════════
+  </text>
+  <text x="600" y="260" text-anchor="middle" font-family="'VT323',monospace" font-size="68" font-weight="bold" fill="#FFC833" filter="url(#textGlow)" letter-spacing="4">
+    OFFICE SPACE
+  </text>
+  <text x="600" y="320" text-anchor="middle" font-family="'VT323',monospace" font-size="44" fill="#FFB000" filter="url(#textGlow)" letter-spacing="3">
+    THE TEXT ADVENTURE
+  </text>
+  <text x="600" y="370" text-anchor="middle" font-family="'VT323',monospace" font-size="26" fill="#FFB000" opacity="0.85" letter-spacing="2">
+    A Conditions-of-Employment Simulator
+  </text>
+  <text x="600" y="420" text-anchor="middle" font-family="'VT323',monospace" font-size="40" fill="#FFD866" filter="url(#textGlow)" letter-spacing="2">
+    ═══════════════════════════════════════════
+  </text>
+
+  <!-- Prompt line at the bottom — implies interactivity -->
+  <text x="60" y="540" font-family="'VT323',monospace" font-size="34" fill="#FFB000" filter="url(#textGlow)">
+    📍 Peter's Bedroom
+  </text>
+  <text x="60" y="580" font-family="'VT323',monospace" font-size="26" fill="#FFB000" opacity="0.85">
+    &gt; <tspan fill="#88FFaa">_</tspan>
+  </text>
+
+  <!-- Scanline + vignette overlays last -->
+  <rect width="1200" height="630" fill="url(#scanlines)"/>
+  <rect width="1200" height="630" fill="url(#vignette)"/>
+</svg>

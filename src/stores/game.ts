@@ -12,10 +12,9 @@ import { fallbackParse } from '@/engine/parser';
 import { buildContext, parseIntentRemote } from '@/engine/intent-client';
 import { makeLine } from '@/engine/output';
 import { createPersistenceService } from '@/services/persistence';
-import { createAuthService } from '@/services/auth';
+import { track } from '@/services/analytics';
 
 const persistence = createPersistenceService();
-const auth = createAuthService();
 const world = officeSpace;
 
 interface State {
@@ -23,8 +22,6 @@ interface State {
   output: OutputLine[];
   isParsing: boolean;
   restored: boolean;
-  /** Set when /api/parse-intent returns 401 — Terminal can prompt for re-auth. */
-  authExpired: boolean;
 }
 
 function freshGame(): GameState {
@@ -37,7 +34,6 @@ export const useGameStore = defineStore('game', {
     output: [],
     isParsing: false,
     restored: false,
-    authExpired: false,
   }),
 
   getters: {
@@ -57,9 +53,11 @@ export const useGameStore = defineStore('game', {
         this.output = saved.outputHistory;
         this.restored = true;
         this.appendSystem('[Session restored — type LOOK to re-orient]');
+        track('session_resumed');
       } else {
         this.appendLines(openingLines(world, this.game));
         this.persist();
+        track('game_start');
       }
     },
 
@@ -127,14 +125,7 @@ export const useGameStore = defineStore('game', {
           this.game.inventory,
           this.visibleItems,
         );
-        const result = await parseIntentRemote(input, ctx, auth.getToken());
-        if (result.unauthorized) {
-          auth.clear();
-          this.authExpired = true;
-          this.appendSystem('[Session expired — re-authenticating]');
-          return;
-        }
-        const action = result.action;
+        const action = await parseIntentRemote(input, ctx);
         this.runAction(action);
       } finally {
         this.isParsing = false;
@@ -142,10 +133,15 @@ export const useGameStore = defineStore('game', {
     },
 
     runAction(action: ParsedAction): void {
+      const wasGameOver = this.game.gameOver;
       const result = execute(action, { world, state: this.game });
       this.appendLines(result.lines);
       if (result.mutated) {
         this.persist();
+      }
+      // Fire game_completed exactly once per session, on the transition.
+      if (!wasGameOver && this.game.gameOver) {
+        track('game_completed', { move_count: this.game.moveCount });
       }
     },
 

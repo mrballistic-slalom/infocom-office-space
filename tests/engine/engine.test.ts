@@ -268,13 +268,32 @@ describe('execute — SMASH flow', () => {
     expect(result.lines[0]).toMatch(/frowned upon/i);
   });
 
-  it('SMASH in the_field without a bat says "you would need something heavy"', () => {
+  it('SMASH printer without a bat in the break room fires hand-hurt', () => {
+    const state = fresh();
+    state.currentRoom = 'break_room';
+    const result = execute({ action: 'smash', target: 'printer' }, { world, state });
+    expect(state.flags.printer_hand_hurt).toBe(true);
+    expect(result.mutated).toBe(true);
+    expect(result.lines.join('\n')).toMatch(/bolted|PC LOAD LETTER|hand/i);
+  });
+
+  it('SMASH printer in the_field without a bat ALSO fires hand-hurt (bare-handed printer-fighting hurts everywhere)', () => {
     const state = fresh();
     state.flags.hypnotized = true;
     state.flags.has_scheme = true;
     state.currentRoom = 'the_field';
     const result = execute({ action: 'smash', target: 'printer' }, { world, state });
-    expect(result.lines[0]).toMatch(/something heavy/i);
+    expect(state.flags.printer_hand_hurt).toBe(true);
+    expect(state.gameOver).toBe(false);
+    expect(result.lines.join('\n')).toMatch(/bolted|PC LOAD LETTER|hand/i);
+  });
+
+  it('SMASH printer twice without a bat — second hit gets the taunt instead of replay', () => {
+    const state = fresh();
+    state.currentRoom = 'break_room';
+    execute({ action: 'smash', target: 'printer' }, { world, state });
+    const second = execute({ action: 'smash', target: 'printer' }, { world, state });
+    expect(second.lines[0]).toMatch(/winning|already hurts|It already hurts/i);
   });
 
   it('SMASH in the_field with a bat fires printer_smash, chains game_ending, ends the game', () => {
@@ -417,6 +436,73 @@ describe('execute — misc commands', () => {
   it('an unknown action falls into the default branch', () => {
     const result = execute({ action: 'breakdance' }, { world, state: fresh() });
     expect(result.lines[0]).toMatch(/don't understand/i);
+  });
+});
+
+describe('execute — alarm clock (onSmash + onSnooze hooks)', () => {
+  it('SMASH alarm clock in the bedroom fires smash_alarm and removes the item', () => {
+    const state = fresh();
+    const result = execute(
+      { action: 'smash', target: 'alarm clock' },
+      { world, state },
+    );
+    expect(result.mutated).toBe(true);
+    expect(state.firedEvents).toContain('smash_alarm');
+    expect(state.flags.alarm_clock_smashed).toBe(true);
+    expect(state.itemsRemoved.apartment_bedroom).toContain('alarm_clock');
+    expect(result.lines.some((l) => /alarm clock|radio/i.test(l))).toBe(true);
+  });
+
+  it('SMASH alarm clock twice — second attempt reports it is already in pieces', () => {
+    const state = fresh();
+    execute({ action: 'smash', target: 'alarm clock' }, { world, state });
+    const second = execute(
+      { action: 'smash', target: 'alarm clock' },
+      { world, state },
+    );
+    // Alarm clock has been removed, so the smash target lookup misses it and falls
+    // through to the printer-smash room check, which rejects in the bedroom.
+    expect(second.mutated).toBe(false);
+    expect(second.lines.join('\n')).toMatch(/frowned upon|already in pieces/i);
+  });
+
+  it('SNOOZE in the bedroom fires snooze_alarm but does NOT remove the clock', () => {
+    const state = fresh();
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.mutated).toBe(false);
+    expect(result.lines.some((l) => /snooze/i.test(l) || /Nine perfect minutes/i.test(l))).toBe(true);
+    expect(state.itemsRemoved.apartment_bedroom ?? []).not.toContain('alarm_clock');
+    expect(state.flags.alarm_clock_smashed).toBeUndefined();
+  });
+
+  it('SNOOZE elsewhere reports nothing to snooze', () => {
+    const state = fresh();
+    state.currentRoom = 'apartment_living';
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.lines[0]).toMatch(/nothing here to snooze/i);
+  });
+
+  it('SNOOZE after smashing the alarm clock gives a contextual reply, not the generic refusal', () => {
+    const state = fresh();
+    execute({ action: 'smash', target: 'alarm clock' }, { world, state });
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.lines.join('\n')).toMatch(/smashed the alarm clock|in pieces|oversleep/i);
+    // Must NOT be the generic refusal.
+    expect(result.lines.join('\n')).not.toMatch(/^There is nothing here to snooze\.$/);
+  });
+
+  it('printer smash still works post-onSmash hook (no regression)', () => {
+    const state = fresh();
+    state.currentRoom = 'the_field';
+    state.flags.has_scheme = true;
+    state.inventory.push('baseball_bat');
+    const result = execute(
+      { action: 'smash', target: 'printer' },
+      { world, state },
+    );
+    expect(result.mutated).toBe(true);
+    expect(state.firedEvents).toContain('printer_smash');
+    expect(state.gameOver).toBe(true);
   });
 });
 
