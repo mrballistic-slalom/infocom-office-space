@@ -44,6 +44,23 @@ const SINGLE_WORD: Record<string, ParsedAction> = {
   load: { action: 'load' },
 };
 
+// Each entry maps a verb-pattern regex (whose first capture group is the target) to the
+// canonical action. Order matters — earlier entries win on ambiguous input.
+const VERB_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [RE.movement, 'go'],
+  [RE.enter, 'go'],
+  [RE.drive, 'go'],
+  [RE.take, 'take'],
+  [RE.drop, 'drop'],
+  [RE.examine, 'examine'],
+  [RE.use, 'use'],
+  [RE.wear, 'wear'],
+  [RE.talk, 'talk'],
+  [RE.ask, 'talk'],
+  [RE.smash, 'smash'],
+  [RE.install, 'install'],
+];
+
 /**
  * Fast, zero-latency parser for canonical commands.
  * Returns null when input doesn't match — caller should fall through to the LLM parser.
@@ -53,28 +70,14 @@ export function fallbackParse(rawInput: string): ParsedAction | null {
   if (!input) return null;
 
   if (input in SINGLE_WORD) return SINGLE_WORD[input];
+  if (input in DIRECTIONS) return { action: 'go', target: DIRECTIONS[input] };
+  if (RE.driveBare.test(input)) return { action: 'go', target: 'drive' };
 
-  if (input in DIRECTIONS) {
-    return { action: 'go', target: DIRECTIONS[input] };
+  for (const [re, action] of VERB_PATTERNS) {
+    const m = input.match(re);
+    if (m) return { action, target: m[1].trim() };
   }
 
-  if (RE.driveBare.test(input)) {
-    return { action: 'go', target: 'drive' };
-  }
-
-  let m: RegExpMatchArray | null;
-  if ((m = input.match(RE.movement))) return { action: 'go', target: m[1].trim() };
-  if ((m = input.match(RE.enter))) return { action: 'go', target: m[1].trim() };
-  if ((m = input.match(RE.drive))) return { action: 'go', target: m[1].trim() };
-  if ((m = input.match(RE.take))) return { action: 'take', target: m[1].trim() };
-  if ((m = input.match(RE.drop))) return { action: 'drop', target: m[1].trim() };
-  if ((m = input.match(RE.examine))) return { action: 'examine', target: m[1].trim() };
-  if ((m = input.match(RE.use))) return { action: 'use', target: m[1].trim() };
-  if ((m = input.match(RE.wear))) return { action: 'wear', target: m[1].trim() };
-  if ((m = input.match(RE.talk))) return { action: 'talk', target: m[1].trim() };
-  if ((m = input.match(RE.ask))) return { action: 'talk', target: m[1].trim() };
-  if ((m = input.match(RE.smash))) return { action: 'smash', target: m[1].trim() };
-  if ((m = input.match(RE.install))) return { action: 'install', target: m[1].trim() };
   if (RE.sit.test(input)) return { action: 'sit' };
   if (RE.wait.test(input)) return { action: 'wait' };
 

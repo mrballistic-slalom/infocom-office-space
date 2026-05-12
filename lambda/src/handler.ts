@@ -132,13 +132,10 @@ function buildSystemPrompt(ctx: IntentContext): string {
 }
 
 function stripCodeFences(raw: string): string {
-  let text = raw.trim();
+  const text = raw.trim();
   // Match ```json ... ``` or ``` ... ``` (possibly with trailing newline).
   const fenced = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
-  if (fenced) {
-    text = fenced[1].trim();
-  }
-  return text;
+  return fenced ? fenced[1].trim() : text;
 }
 
 interface BedrockMessagesBody {
@@ -146,12 +143,9 @@ interface BedrockMessagesBody {
 }
 
 function extractText(body: BedrockMessagesBody): string {
-  if (!body.content) return '';
   const parts: string[] = [];
-  for (const c of body.content) {
-    if (c.type === 'text' && typeof c.text === 'string') {
-      parts.push(c.text);
-    }
+  for (const c of body.content ?? []) {
+    if (c.type === 'text' && typeof c.text === 'string') parts.push(c.text);
   }
   return parts.join('');
 }

@@ -2,29 +2,31 @@
 import { officeSpace } from '../src/worlds/office-space';
 import { initialState, execute, openingLines } from '../src/engine/engine';
 import { fallbackParse } from '../src/engine/parser';
+import type { GameState } from '../src/types/game';
 
-const state = initialState(officeSpace);
-const log: string[] = [];
+function runScript(label: string, commands: string[]): GameState {
+  const state = initialState(officeSpace);
+  const log: string[] = [...openingLines(officeSpace, state)];
 
-function emit(lines: string[]): void {
-  for (const l of lines) log.push(l);
-}
-
-emit(openingLines(officeSpace, state));
-
-function cmd(input: string): void {
-  log.push(`> ${input}`);
-  const parsed = fallbackParse(input);
-  if (!parsed) {
-    log.push(`[unparsed: ${input}]`);
-    return;
+  for (const input of commands) {
+    log.push(`> ${input}`);
+    const parsed = fallbackParse(input);
+    if (!parsed) {
+      log.push(`[unparsed: ${input}]`);
+      continue;
+    }
+    const res = execute(parsed, { world: officeSpace, state });
+    log.push(...res.lines);
   }
-  const res = execute(parsed, { world: officeSpace, state });
-  emit(res.lines);
+
+  console.log(`--- ${label} ---`);
+  console.log(log.join('\n'));
+  return state;
 }
 
-// Cold world tour + critical path through liberation, scheme, virus, smash.
-const script = [
+// Cold-start dead-end tour: explore the pre-hypnosis side of the world and verify
+// the design intentionally one-way-streets the player at Initech.
+runScript('PART 1: dead-end tour', [
   'west',                    // bedroom -> living
   'take wallet',
   'take key',
@@ -39,34 +41,10 @@ const script = [
   'out',                     // -> cubicle_farm
   'lobby',                   // -> initech_lobby
   'outside',                 // -> initech_parking
-  // Drive home, then to therapist.
-  'south',                   // -> commute_worse? no — initech_parking exits don't include south. Try drive.
-  // Better: from initech_parking, find way back. exits are lobby, enter, in, north.
-  // We need to get to parking_lot. We came via 'east' from commute. Reverse?
-  // commute exits: switch, wait, forward, east. None go back. Cold game design.
-  // So we can't drive back to therapist from work.
-  // Restart approach: from initech_parking, go back via north? north goes to lobby.
-  // Take new path: skip the work tour and go straight to hypnotherapist.
-  'lobby',                   // -> initech_lobby (just to recover from dead-end)
-];
+  'lobby',                   // recover from the cold dead-end
+]);
 
-console.log('--- PART 1: dead-end tour ---');
-for (const c of script) cmd(c);
-
-// Reset and try clean critical path.
-const state2 = initialState(officeSpace);
-const log2: string[] = [];
-function emit2(lines: string[]): void { for (const l of lines) log2.push(l); }
-emit2(openingLines(officeSpace, state2));
-function cmd2(input: string): void {
-  log2.push(`> ${input}`);
-  const parsed = fallbackParse(input);
-  if (!parsed) { log2.push(`[unparsed: ${input}]`); return; }
-  const res = execute(parsed, { world: officeSpace, state: state2 });
-  emit2(res.lines);
-}
-
-const criticalPath = [
+const finalState = runScript('PART 2: critical path', [
   'west', 'take wallet', 'take key',     // grab things
   'out',                                  // -> parking_lot
   'north',                                // -> hypnotherapist (hypnosis fires)
@@ -80,17 +58,13 @@ const criticalPath = [
   'use server terminal',                  // install_virus
   'field',                                // server_room -> the_field
   'smash printer',                        // printer_smash + game_ending chain
-];
+]);
 
-console.log('\n\n--- PART 2: critical path ---');
-for (const c of criticalPath) cmd2(c);
-
-console.log(log2.join('\n'));
 console.log('\n--- FINAL STATE (critical path) ---');
 console.log({
-  currentRoom: state2.currentRoom,
-  inventory: state2.inventory,
-  flags: state2.flags,
-  moveCount: state2.moveCount,
-  gameOver: state2.gameOver,
+  currentRoom: finalState.currentRoom,
+  inventory: finalState.inventory,
+  flags: finalState.flags,
+  moveCount: finalState.moveCount,
+  gameOver: finalState.gameOver,
 });

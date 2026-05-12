@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 
 const TEST_JWT_SECRET = 'unit-test-jwt-secret-long-enough';
@@ -83,14 +83,16 @@ function bedrockResponse(text: string) {
   };
 }
 
-async function invoke(event: APIGatewayProxyEventV2) {
+interface HandlerResult {
+  statusCode: number;
+  body: string;
+  headers: Record<string, string>;
+}
+
+async function invoke(event: APIGatewayProxyEventV2): Promise<HandlerResult> {
   // Handler is APIGatewayProxyHandlerV2; provide minimal context/callback.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (await (handler as any)(event, {}, () => undefined)) as {
-    statusCode: number;
-    body: string;
-    headers: Record<string, string>;
-  };
+  const res = await handler(event, {} as never, () => undefined);
+  return res as HandlerResult;
 }
 
 describe('parse-intent handler', () => {

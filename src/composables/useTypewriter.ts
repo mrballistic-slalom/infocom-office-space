@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import type { OutputLine, OutputLineType } from '@/types/game';
 
 /**
@@ -147,17 +147,9 @@ export function useTypewriter(): UseTypewriter {
     activeCharIndex = 0;
   }
 
-  // Expose isTyping as computed to keep the surface read-only.
-  const isTypingReadonly = computed({
-    get: () => isTyping.value,
-    set: (v) => {
-      isTyping.value = v;
-    },
-  });
-
   return {
     renderedLines,
-    isTyping: isTypingReadonly,
+    isTyping,
     enqueue,
     flush,
     reset,

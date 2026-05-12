@@ -6,6 +6,7 @@ import {
   initialState,
   openingLines,
   describeCurrentRoom,
+  visibleItemsIn,
 } from '@/engine/engine';
 import { fallbackParse } from '@/engine/parser';
 import { buildContext, parseIntentRemote } from '@/engine/intent-client';
@@ -45,17 +46,7 @@ export const useGameStore = defineStore('game', {
     persistenceAvailable: () => persistence.isAvailable(),
     world: () => world,
     currentRoom: (s) => world.rooms[s.game.currentRoom],
-    visibleItems(s): string[] {
-      const room = world.rooms[s.game.currentRoom];
-      if (!room) return [];
-      const removed = new Set(s.game.itemsRemoved[s.game.currentRoom] ?? []);
-      const inInv = new Set(s.game.inventory);
-      const base = room.items.filter((id) => !removed.has(id) && !inInv.has(id));
-      const added = (s.game.itemsAdded[s.game.currentRoom] ?? []).filter(
-        (id) => !inInv.has(id),
-      );
-      return [...base, ...added];
-    },
+    visibleItems: (s) => visibleItemsIn(s.game.currentRoom, world, s.game),
   },
 
   actions: {

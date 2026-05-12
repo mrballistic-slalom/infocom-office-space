@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { APIGatewayProxyEventV2 } from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { verifyJwt } from './jwt';
 
 function makeEvent(body: unknown, isBase64 = false): APIGatewayProxyEventV2 {
@@ -11,18 +11,16 @@ function makeEvent(body: unknown, isBase64 = false): APIGatewayProxyEventV2 {
   } as unknown as APIGatewayProxyEventV2;
 }
 
-function statusOf(res: unknown): number {
-  if (res && typeof res === 'object' && 'statusCode' in res) {
-    return (res as { statusCode: number }).statusCode;
-  }
-  throw new Error('bad response');
+type HandlerResult = APIGatewayProxyStructuredResultV2;
+
+function statusOf(res: void | HandlerResult): number {
+  if (!res?.statusCode) throw new Error('bad response');
+  return res.statusCode;
 }
 
-function bodyOf<T>(res: unknown): T {
-  if (res && typeof res === 'object' && 'body' in res) {
-    return JSON.parse((res as { body: string }).body) as T;
-  }
-  throw new Error('bad response');
+function bodyOf<T>(res: void | HandlerResult): T {
+  if (!res?.body) throw new Error('bad response');
+  return JSON.parse(res.body) as T;
 }
 
 describe('auth handler', () => {

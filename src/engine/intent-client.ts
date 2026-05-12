@@ -41,19 +41,19 @@ export async function parseIntentRemote(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify({ input, context }),
       signal: controller.signal,
     });
-    if (res.status === 401) {
-      return { action: { action: 'unknown' }, unauthorized: true };
-    }
+    if (res.status === 401) return { action: { action: 'unknown' }, unauthorized: true };
     if (!res.ok) return { action: { action: 'unknown' } };
+
     const json = (await res.json()) as Partial<ParsedAction> & { fallback?: ParsedAction };
     if (json.fallback) return { action: json.fallback };
     if (typeof json.action !== 'string') return { action: { action: 'unknown' } };

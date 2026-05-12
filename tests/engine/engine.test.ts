@@ -3,6 +3,7 @@ import {
   execute,
   openingLines,
   describeCurrentRoom,
+  visibleItemsIn,
   __test,
 } from '@/engine/engine';
 import { officeSpace } from '@/worlds/office-space';
@@ -137,7 +138,7 @@ describe('execute — items: take / drop / inventory', () => {
     expect(state.inventory).not.toContain('wallet');
     expect(dropResult.lines[0]).toMatch(/Dropped: wallet/);
 
-    const visible = __test.visibleItemsIn(state.currentRoom, world, state);
+    const visible = visibleItemsIn(state.currentRoom, world, state);
     expect(visible).toContain('wallet');
   });
 

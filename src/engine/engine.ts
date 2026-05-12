@@ -1,5 +1,5 @@
 import type { GameState, ParsedAction } from '@/types/game';
-import type { World, Room } from '@/types/world';
+import type { World } from '@/types/world';
 import { evaluateCondition } from './conditions';
 import { fuzzyMatch, fuzzyMatchExit } from './fuzzy';
 
@@ -33,12 +33,10 @@ function applyEventEffects(eventKey: string, world: World, state: GameState): vo
   const lines = world.events[eventKey] ?? [];
   for (const line of lines) {
     if (!line.startsWith('[')) continue;
-    const lower = line.toLowerCase();
 
     const flagSet = line.match(/Flag set:\s*(.+?)\]/i);
     if (flagSet) {
-      const label = flagSet[1].toLowerCase().trim();
-      const flagId = labelToFlag(label);
+      const flagId = labelToFlag(flagSet[1].toLowerCase().trim());
       if (flagId) state.flags[flagId] = true;
     }
 
@@ -48,7 +46,7 @@ function applyEventEffects(eventKey: string, world: World, state: GameState): vo
       if (itemId && !state.inventory.includes(itemId)) state.inventory.push(itemId);
     }
 
-    if (lower.includes('floppy disk consumed')) {
+    if (line.toLowerCase().includes('floppy disk consumed')) {
       state.inventory = state.inventory.filter((i) => i !== 'floppy_disk');
     }
   }
@@ -103,7 +101,7 @@ function describeRoom(roomId: string, world: World, state: GameState): string[] 
   return lines;
 }
 
-function visibleItemsIn(roomId: string, world: World, state: GameState): string[] {
+export function visibleItemsIn(roomId: string, world: World, state: GameState): string[] {
   const room = world.rooms[roomId];
   if (!room) return [];
   const removed = new Set(state.itemsRemoved[roomId] ?? []);
@@ -138,11 +136,7 @@ function enterRoom(targetId: string, world: World, state: GameState): string[] {
   state.currentRoom = targetId;
   state.moveCount += 1;
   const lines = describeRoom(targetId, world, state);
-  const events = runOnEnter(targetId, world, state);
-  if (events.length > 0) lines.push(...events);
-  if (targetId === 'ending') {
-    state.gameOver = true;
-  }
+  lines.push(...runOnEnter(targetId, world, state));
   return lines;
 }
 
@@ -518,5 +512,4 @@ export function describeCurrentRoom(world: World, state: GameState): string[] {
 }
 
 /** Re-export internal helpers for test access. */
-export const __test = { describeRoom, runOnEnter, visibleItemsIn, denialFor, enterRoom };
-export type { Room };
+export const __test = { denialFor, enterRoom };
