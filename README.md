@@ -151,6 +151,15 @@ This is a personal project and architecture proof-of-concept. The Office Space w
 
 See `docs/PRD-4.md` for the full product requirements doc — every functional requirement is numbered (FR-###) and every behavior in the code traces back to one.
 
+## Analytics
+
+Google Analytics 4 fires on production builds only. The measurement ID is read from `VITE_GA_MEASUREMENT_ID` (see `.env.production`). gtag is **not** loaded when:
+
+- The ID is unset or still the `G-XXX...` placeholder
+- The browser sends `navigator.doNotTrack === '1'`
+
+Two custom events beyond the auto-pageview: `game_start` on fresh init, `game_completed` (with `move_count`) when the printer-smash ending fires. Resumed sessions fire `session_resumed` instead of `game_start`.
+
 ## License
 
 [MIT](./LICENSE)

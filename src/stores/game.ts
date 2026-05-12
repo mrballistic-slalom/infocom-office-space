@@ -12,6 +12,7 @@ import { fallbackParse } from '@/engine/parser';
 import { buildContext, parseIntentRemote } from '@/engine/intent-client';
 import { makeLine } from '@/engine/output';
 import { createPersistenceService } from '@/services/persistence';
+import { track } from '@/services/analytics';
 
 const persistence = createPersistenceService();
 const world = officeSpace;
@@ -52,9 +53,11 @@ export const useGameStore = defineStore('game', {
         this.output = saved.outputHistory;
         this.restored = true;
         this.appendSystem('[Session restored — type LOOK to re-orient]');
+        track('session_resumed');
       } else {
         this.appendLines(openingLines(world, this.game));
         this.persist();
+        track('game_start');
       }
     },
 
@@ -130,10 +133,15 @@ export const useGameStore = defineStore('game', {
     },
 
     runAction(action: ParsedAction): void {
+      const wasGameOver = this.game.gameOver;
       const result = execute(action, { world, state: this.game });
       this.appendLines(result.lines);
       if (result.mutated) {
         this.persist();
+      }
+      // Fire game_completed exactly once per session, on the transition.
+      if (!wasGameOver && this.game.gameOver) {
+        track('game_completed', { move_count: this.game.moveCount });
       }
     },
 
