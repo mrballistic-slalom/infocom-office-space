@@ -1,36 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import PasswordGate from '@/components/PasswordGate.vue';
+import { ref, onMounted } from 'vue';
 import CrtBootSequence from '@/components/CrtBootSequence.vue';
 import Terminal from '@/components/Terminal.vue';
 import { createPersistenceService } from '@/services/persistence';
-import { useGameStore } from '@/stores/game';
 
-const authenticated = ref(false);
 const bootComplete = ref(false);
 const fastBoot = ref(false);
-
-const store = useGameStore();
-const { authExpired } = storeToRefs(store);
 
 onMounted(() => {
   const svc = createPersistenceService();
   fastBoot.value = svc.load() !== null;
 });
-
-// If the LLM endpoint hands back a 401 mid-game, kick back to the password gate.
-watch(authExpired, (expired) => {
-  if (expired) {
-    authenticated.value = false;
-    bootComplete.value = false;
-    store.authExpired = false;
-  }
-});
-
-function onAuthenticated(): void {
-  authenticated.value = true;
-}
 
 function onBootComplete(): void {
   bootComplete.value = true;
@@ -61,17 +41,15 @@ onMounted(scheduleGlitch);
     <div class="crt-flicker-base">
       <div class="crt-flicker-secondary">
         <div class="crt-glitch" :class="glitchClass">
-          <Terminal v-if="authenticated && bootComplete" />
+          <Terminal v-if="bootComplete" />
         </div>
       </div>
     </div>
 
     <CrtBootSequence
-      v-if="authenticated && !bootComplete"
+      v-if="!bootComplete"
       :fast="fastBoot"
       @complete="onBootComplete"
     />
-
-    <PasswordGate v-if="!authenticated" @authenticated="onAuthenticated" />
   </div>
 </template>

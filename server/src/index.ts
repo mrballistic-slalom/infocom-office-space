@@ -1,6 +1,5 @@
 import express from 'express';
 import { config } from './config.js';
-import { authRouter } from './routes/auth.js';
 import { intentRouter } from './routes/parse-intent.js';
 
 const app = express();
@@ -16,7 +15,7 @@ app.use(express.json({ limit: '32kb' }));
 // loopback port directly during local dev.
 app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   next();
 });
@@ -30,7 +29,6 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
-app.use('/api', authRouter);
 app.use('/api', intentRouter);
 
 // JSON 404 so a misrouted request from Apache doesn't return HTML.

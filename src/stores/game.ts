@@ -12,10 +12,8 @@ import { fallbackParse } from '@/engine/parser';
 import { buildContext, parseIntentRemote } from '@/engine/intent-client';
 import { makeLine } from '@/engine/output';
 import { createPersistenceService } from '@/services/persistence';
-import { createAuthService } from '@/services/auth';
 
 const persistence = createPersistenceService();
-const auth = createAuthService();
 const world = officeSpace;
 
 interface State {
@@ -23,8 +21,6 @@ interface State {
   output: OutputLine[];
   isParsing: boolean;
   restored: boolean;
-  /** Set when /api/parse-intent returns 401 — Terminal can prompt for re-auth. */
-  authExpired: boolean;
 }
 
 function freshGame(): GameState {
@@ -37,7 +33,6 @@ export const useGameStore = defineStore('game', {
     output: [],
     isParsing: false,
     restored: false,
-    authExpired: false,
   }),
 
   getters: {
@@ -127,14 +122,7 @@ export const useGameStore = defineStore('game', {
           this.game.inventory,
           this.visibleItems,
         );
-        const result = await parseIntentRemote(input, ctx, auth.getToken());
-        if (result.unauthorized) {
-          auth.clear();
-          this.authExpired = true;
-          this.appendSystem('[Session expired — re-authenticating]');
-          return;
-        }
-        const action = result.action;
+        const action = await parseIntentRemote(input, ctx);
         this.runAction(action);
       } finally {
         this.isParsing = false;

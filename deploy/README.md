@@ -49,11 +49,15 @@ EOF
 sudo chmod 0640 /etc/initech.env
 
 # 4. Apache vhost + TLS
-sudo cp deploy/apache-initech.conf /etc/apache2/sites-available/initech.conf
+#    Important order: install the bootstrap vhost (port 80 only) BEFORE running
+#    certbot. The vhost has no SSL refs yet, so apache2ctl configtest passes.
+#    certbot writes /etc/apache2/sites-enabled/initech-le-ssl.conf with the
+#    443 vhost after fetching the cert.
 sudo a2enmod proxy proxy_http ssl headers rewrite
+sudo cp deploy/apache-initech.conf /etc/apache2/sites-available/initech.conf
 sudo a2ensite initech
-sudo certbot --apache -d initech.mrballistic.com   # rewrites the 443 block
-sudo systemctl reload apache2
+sudo apache2ctl configtest && sudo systemctl reload apache2
+sudo certbot --apache -d initech.mrballistic.com
 
 # 5. pm2 systemd boot integration
 sudo cp deploy/pm2-initech.service /etc/systemd/system/

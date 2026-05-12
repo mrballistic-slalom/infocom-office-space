@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/require-auth.js';
 import { parseIntent, type IntentContext } from '../llm.js';
 
 function isIntentContext(value: unknown): value is IntentContext {
@@ -19,10 +18,12 @@ export const intentRouter = Router();
 /**
  * POST /api/parse-intent
  * Body: { input: string, context: IntentContext }
- * Requires Authorization: Bearer <jwt>.
  * Returns 200 { action, target? } or 500 { error, fallback }.
+ *
+ * No auth on this branch — Gemini's free-tier rate cap is the natural abuse
+ * limit and there's no per-token billing to worry about.
  */
-intentRouter.post('/parse-intent', requireAuth, async (req, res) => {
+intentRouter.post('/parse-intent', async (req, res) => {
   const body = req.body as Partial<{ input: unknown; context: unknown }> | undefined;
   if (!body || typeof body.input !== 'string' || body.input.trim().length === 0) {
     res.status(400).json({ error: 'Missing required field: input' });
