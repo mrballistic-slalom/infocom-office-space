@@ -40,7 +40,14 @@ function injectGtag(id: string): void {
     window.dataLayer!.push(args);
   };
   window.gtag('js', new Date());
-  window.gtag('config', id);
+  // send_page_view: false — gtag's auto page_view runs the moment 'config'
+  // fires, which on SPA loads can race the document parse and yield
+  // page_title="(not set)". We fire it explicitly below with known values.
+  window.gtag('config', id, { send_page_view: false });
+  window.gtag('event', 'page_view', {
+    page_title: document.title,
+    page_location: window.location.href,
+  });
 }
 
 /**
