@@ -151,6 +151,18 @@ This is a personal project and architecture proof-of-concept. The Office Space w
 
 See `docs/PRD-4.md` for the full product requirements doc — every functional requirement is numbered (FR-###) and every behavior in the code traces back to one.
 
+## Social previews
+
+`index.html` has the full Open Graph + Twitter Card meta block pointed at `https://initech.mrballistic.com/` and a 1200×630 SVG card at `public/og-image.svg`. The favicon is `public/favicon.svg` — a single amber phosphor cursor on black, scanlines.
+
+If you find a scraper that doesn't render SVG (rare in 2026 but possible), drop a 1200×630 PNG at `public/og-image.png` and swap the `og:image` / `twitter:image` URLs in `index.html`.
+
+After deploys, validate previews with:
+- Facebook: https://developers.facebook.com/tools/debug/
+- Twitter / X: https://cards-dev.twitter.com/validator
+- LinkedIn: https://www.linkedin.com/post-inspector/
+- Slack just refetches when you post a fresh URL.
+
 ## Analytics
 
 Google Analytics 4 fires on production builds only. The measurement ID is read from `VITE_GA_MEASUREMENT_ID` (see `.env.production`). gtag is **not** loaded when:
