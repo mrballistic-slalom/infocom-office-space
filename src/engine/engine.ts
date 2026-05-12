@@ -63,6 +63,7 @@ function labelToFlag(label: string): string | null {
     'has scheme': 'has_scheme',
     'virus installed': 'virus_installed',
     'printer destroyed': 'printer_destroyed',
+    'alarm clock smashed': 'alarm_clock_smashed',
   };
   return map[label] ?? null;
 }
@@ -376,6 +377,32 @@ function handleTalk(target: string | undefined, world: World, state: GameState):
 }
 
 function handleSmash(target: string | undefined, world: World, state: GameState): EngineResult {
+  // Generic onSmash hook on items first — covers things like the alarm clock that
+  // can be destroyed anywhere, with their own one-shot event. The printer ending
+  // flow stays in its room-specific path below.
+  if (target) {
+    const visibleIds = visibleItemsIn(state.currentRoom, world, state);
+    const candidates = [...visibleIds, ...state.inventory].map((id) => ({
+      id,
+      name: world.items[id]?.name ?? id,
+    }));
+    const itemId = fuzzyMatch(target, candidates);
+    const item = itemId ? world.items[itemId] : null;
+    if (item?.onSmash) {
+      if (state.firedEvents.includes(item.onSmash)) {
+        return { lines: [`The ${item.name} is already in pieces.`], mutated: false };
+      }
+      const lines = [...(world.events[item.onSmash] ?? [])];
+      applyEventEffects(item.onSmash, world, state);
+      state.firedEvents.push(item.onSmash);
+      // Remove the broken item from the room — it's no longer there.
+      const removed = state.itemsRemoved[state.currentRoom] ?? [];
+      if (!removed.includes(itemId!)) removed.push(itemId!);
+      state.itemsRemoved[state.currentRoom] = removed;
+      return { lines, mutated: true };
+    }
+  }
+
   const inRightRoom = state.currentRoom === 'the_field' || state.currentRoom === 'break_room_post';
   if (!inRightRoom) {
     return { lines: ['Smashing things at work is, somehow, still frowned upon.'], mutated: false };
@@ -400,6 +427,20 @@ function handleSmash(target: string | undefined, world: World, state: GameState)
   return { lines, mutated: true };
 }
 
+function handleSnooze(world: World, state: GameState): EngineResult {
+  // Find the first item in the current room that has an onSnooze hook.
+  const visibleIds = visibleItemsIn(state.currentRoom, world, state);
+  const snoozable = visibleIds
+    .map((id) => ({ id, item: world.items[id] }))
+    .find(({ item }) => item?.onSnooze);
+  if (!snoozable || !snoozable.item?.onSnooze) {
+    return { lines: ['There is nothing here to snooze.'], mutated: false };
+  }
+  const lines = [...(world.events[snoozable.item.onSnooze] ?? [])];
+  applyEventEffects(snoozable.item.onSnooze, world, state);
+  return { lines, mutated: false };
+}
+
 function handleInstall(target: string | undefined, world: World, state: GameState): EngineResult {
   // INSTALL is an alias for USE on the server terminal.
   if (state.currentRoom !== 'server_room') {
@@ -421,7 +462,8 @@ function handleHelp(): EngineResult {
       'WEAR <item>              Put on a wearable',
       'TALK TO <npc>            Speak with someone (synonyms: ASK)',
       'INVENTORY / I            List what you are carrying',
-      'SMASH <target>           Apply violence (requires a tool)',
+      'SMASH <target>           Apply violence',
+      'SNOOZE                   Hit the snooze button (contextual)',
       'INSTALL <target>         Install (used on server terminal)',
       'SAVE                     Save progress to local terminal memory',
       'LOAD                     Restore last saved game',
@@ -476,6 +518,8 @@ export function execute(
       return handleInventory(world, state);
     case 'smash':
       return handleSmash(action.target, world, state);
+    case 'snooze':
+      return handleSnooze(world, state);
     case 'install':
       return handleInstall(action.target, world, state);
     case 'help':

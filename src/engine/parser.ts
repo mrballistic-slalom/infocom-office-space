@@ -6,13 +6,13 @@ const DIRECTIONS: Record<string, string> = {
   e: 'east', east: 'east',
   w: 'west', west: 'west',
   up: 'up', down: 'down',
-  out: 'out', outside: 'outside',
+  out: 'out', outside: 'outside', exit: 'out',
   in: 'in', inside: 'inside',
   back: 'back',
 };
 
 const RE = {
-  movement: /^(?:go|move|walk|head|run)\s+(?:to\s+(?:the\s+)?|toward\s+|over\s+to\s+(?:the\s+)?)?(.+)$/i,
+  movement: /^(?:go|move|walk|head|run|exit)\s+(?:to\s+(?:the\s+)?|toward\s+|over\s+to\s+(?:the\s+)?|out\s+to\s+(?:the\s+)?)?(.+)$/i,
   enter: /^(?:enter|into)\s+(?:the\s+)?(.+)$/i,
   drive: /^(?:drive\s+to|drive|take\s+the\s+car(?:\s+to)?)\s+(.+)$/i,
   driveBare: /^(?:drive|leave)$/i,
@@ -27,6 +27,7 @@ const RE = {
   install: /^(?:install|run|load)\s+(?:the\s+)?(.+)$/i,
   sit: /^(?:sit(?:\s+down)?|relax)$/i,
   wait: /^(?:wait|z)$/i,
+  snooze: /^(?:snooze|hit\s+(?:the\s+)?snooze(?:\s+button)?|press\s+snooze)$/i,
 };
 
 const SINGLE_WORD: Record<string, ParsedAction> = {
@@ -39,7 +40,6 @@ const SINGLE_WORD: Record<string, ParsedAction> = {
   '?': { action: 'help' },
   restart: { action: 'restart' },
   quit: { action: 'quit' },
-  exit: { action: 'quit' },
   save: { action: 'save' },
   load: { action: 'load' },
 };
@@ -72,6 +72,9 @@ export function fallbackParse(rawInput: string): ParsedAction | null {
   if (input in SINGLE_WORD) return SINGLE_WORD[input];
   if (input in DIRECTIONS) return { action: 'go', target: DIRECTIONS[input] };
   if (RE.driveBare.test(input)) return { action: 'go', target: 'drive' };
+  // snooze runs before the verb-pattern loop because "hit" is a smash synonym;
+  // "hit snooze" would otherwise be parsed as smash("snooze").
+  if (RE.snooze.test(input)) return { action: 'snooze' };
 
   for (const [re, action] of VERB_PATTERNS) {
     const m = input.match(re);

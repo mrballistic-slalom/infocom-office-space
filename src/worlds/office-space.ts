@@ -388,6 +388,8 @@ export const officeSpace: World = {
       description: 'A clock radio. It is currently broadcasting a man laughing about traffic.',
       portable: false,
       tags: ['flavor'],
+      onSmash: 'smash_alarm',
+      onSnooze: 'snooze_alarm',
     },
     apartment_key: {
       name: 'apartment key',
@@ -566,6 +568,19 @@ export const officeSpace: World = {
       '═══════════════════════════════════════════',
       '"And so it begins. Another Monday. The radio jock is laughing again."',
       '✨ CHAPTER 1: ANOTHER CASE OF THE MONDAYS',
+    ],
+    smash_alarm: [
+      '🔨 You bring a fist down on the alarm clock. The radio gives a sharp, digital yelp.',
+      '🔨 You bring it down again. The DJ stops laughing.',
+      '💥 The clock face cracks. The man on the radio is, finally, definitively, silent.',
+      '"You\'ve already broken something today. The day is young."',
+      '[Flag set: Alarm clock smashed]',
+    ],
+    snooze_alarm: [
+      '😴 You slap the snooze bar.',
+      '😴 The DJ stops mid-laugh. Nine perfect minutes of silence.',
+      '😴 ...',
+      '😴 The DJ comes back, refreshed, laughing harder than before.',
     ],
     lumbergh_tps: [
       '👔 Lumbergh appears in the entrance of your cubicle, holding his coffee mug like a scepter.',

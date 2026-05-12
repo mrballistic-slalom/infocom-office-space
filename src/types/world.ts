@@ -19,6 +19,8 @@ export interface Item {
   portable: boolean;
   tags: string[];
   onTake?: string;
+  onSmash?: string;
+  onSnooze?: string;
 }
 
 export interface NPC {

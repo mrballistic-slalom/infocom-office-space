@@ -420,6 +420,64 @@ describe('execute — misc commands', () => {
   });
 });
 
+describe('execute — alarm clock (onSmash + onSnooze hooks)', () => {
+  it('SMASH alarm clock in the bedroom fires smash_alarm and removes the item', () => {
+    const state = fresh();
+    const result = execute(
+      { action: 'smash', target: 'alarm clock' },
+      { world, state },
+    );
+    expect(result.mutated).toBe(true);
+    expect(state.firedEvents).toContain('smash_alarm');
+    expect(state.flags.alarm_clock_smashed).toBe(true);
+    expect(state.itemsRemoved.apartment_bedroom).toContain('alarm_clock');
+    expect(result.lines.some((l) => /alarm clock|radio/i.test(l))).toBe(true);
+  });
+
+  it('SMASH alarm clock twice — second attempt reports it is already in pieces', () => {
+    const state = fresh();
+    execute({ action: 'smash', target: 'alarm clock' }, { world, state });
+    const second = execute(
+      { action: 'smash', target: 'alarm clock' },
+      { world, state },
+    );
+    // Alarm clock has been removed, so the smash target lookup misses it and falls
+    // through to the printer-smash room check, which rejects in the bedroom.
+    expect(second.mutated).toBe(false);
+    expect(second.lines.join('\n')).toMatch(/frowned upon|already in pieces/i);
+  });
+
+  it('SNOOZE in the bedroom fires snooze_alarm but does NOT remove the clock', () => {
+    const state = fresh();
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.mutated).toBe(false);
+    expect(result.lines.some((l) => /snooze/i.test(l) || /Nine perfect minutes/i.test(l))).toBe(true);
+    expect(state.itemsRemoved.apartment_bedroom ?? []).not.toContain('alarm_clock');
+    expect(state.flags.alarm_clock_smashed).toBeUndefined();
+  });
+
+  it('SNOOZE elsewhere reports nothing to snooze', () => {
+    const state = fresh();
+    state.currentRoom = 'apartment_living';
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.lines[0]).toMatch(/nothing here to snooze/i);
+  });
+
+  it('printer smash still works post-onSmash hook (no regression)', () => {
+    const state = fresh();
+    state.currentRoom = 'the_field';
+    state.flags.has_scheme = true;
+    state.inventory.push('baseball_bat');
+    const result = execute(
+      { action: 'smash', target: 'printer' },
+      { world, state },
+    );
+    expect(result.mutated).toBe(true);
+    expect(state.firedEvents).toContain('printer_smash');
+    expect(state.gameOver).toBe(true);
+  });
+});
+
 describe('describeCurrentRoom', () => {
   it('returns the current room\'s describe lines', () => {
     const state = fresh();

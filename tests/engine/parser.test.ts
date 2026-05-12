@@ -27,7 +27,6 @@ describe('fallbackParse', () => {
       ['?', { action: 'help' }],
       ['restart', { action: 'restart' }],
       ['quit', { action: 'quit' }],
-      ['exit', { action: 'quit' }],
       ['save', { action: 'save' }],
       ['load', { action: 'load' }],
     ])('parses %s', (input, expected) => {
@@ -239,6 +238,45 @@ describe('fallbackParse', () => {
     it('upper-cased verbs still parse', () => {
       expect(fallbackParse('TAKE STAPLER')).toEqual({ action: 'take', target: 'stapler' });
       expect(fallbackParse('Go North')).toEqual({ action: 'go', target: 'north' });
+    });
+  });
+
+  describe('exit verb', () => {
+    it('parses "exit to living room"', () => {
+      expect(fallbackParse('exit to living room')).toEqual({
+        action: 'go',
+        target: 'living room',
+      });
+    });
+    it('parses "exit to the living room"', () => {
+      expect(fallbackParse('exit to the living room')).toEqual({
+        action: 'go',
+        target: 'living room',
+      });
+    });
+    it('parses "exit to living_room" (snake_case)', () => {
+      expect(fallbackParse('exit to living_room')).toEqual({
+        action: 'go',
+        target: 'living_room',
+      });
+    });
+    it('parses bare "exit" as go out', () => {
+      expect(fallbackParse('exit')).toEqual({ action: 'go', target: 'out' });
+    });
+  });
+
+  describe('snooze verb', () => {
+    it('parses bare "snooze"', () => {
+      expect(fallbackParse('snooze')).toEqual({ action: 'snooze' });
+    });
+    it('parses "hit snooze"', () => {
+      expect(fallbackParse('hit snooze')).toEqual({ action: 'snooze' });
+    });
+    it('parses "hit the snooze button"', () => {
+      expect(fallbackParse('hit the snooze button')).toEqual({ action: 'snooze' });
+    });
+    it('parses "press snooze"', () => {
+      expect(fallbackParse('press snooze')).toEqual({ action: 'snooze' });
     });
   });
 });
