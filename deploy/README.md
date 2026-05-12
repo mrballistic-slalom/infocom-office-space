@@ -69,18 +69,28 @@ sudo systemctl enable pm2-initech.service
 
 ## Every release
 
-From your workstation:
+Two flows depending on where you'd rather build.
 
+**From your workstation** (no source clone on the box):
 ```bash
 DEPLOY_HOST=user@your.server ./deploy/deploy.sh
 ```
 
-The script:
-1. Builds the SPA (`npm run build`) and the server (`tsc`)
-2. rsyncs the SPA to `/var/www/initech/` and the server bundle to `/opt/initech-backend/`
-3. Runs `npm ci --omit=dev` on the server (native bindings get the right arch)
+**On the box** (after `git pull` in your local checkout):
+```bash
+cd ~/src/initech-terminal
+git pull
+./deploy/deploy-local.sh
+```
+
+Both scripts do the same five steps:
+1. Build the SPA (`npm run build`) and the server (`tsc`)
+2. Publish the SPA to `/var/www/initech/` and the server bundle to `/opt/initech-backend/`
+3. `npm ci --omit=dev` (so native bindings match the host)
 4. `pm2 reload` for zero-downtime swap (or `pm2 start` on first deploy)
-5. Hits `/health` to confirm
+5. Hit `/health` to confirm
+
+`deploy-local.sh` uses `sudo` internally (writes `/var/www/initech`, drops to the `initech` user for pm2), so it'll prompt for your password once.
 
 ## Operations
 
