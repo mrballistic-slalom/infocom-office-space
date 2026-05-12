@@ -16,7 +16,7 @@ export interface ParsedAction {
 
 const ACTION_VOCAB = [
   'go', 'take', 'drop', 'use', 'examine', 'look', 'talk', 'inventory',
-  'smash', 'wear', 'install', 'sit', 'wait', 'help', 'restart', 'quit',
+  'smash', 'snooze', 'wear', 'install', 'sit', 'wait', 'help', 'restart', 'quit',
   'save', 'load', 'unknown',
 ] as const;
 

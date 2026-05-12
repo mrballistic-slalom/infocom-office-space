@@ -482,6 +482,15 @@ describe('execute — alarm clock (onSmash + onSnooze hooks)', () => {
     expect(result.lines[0]).toMatch(/nothing here to snooze/i);
   });
 
+  it('SNOOZE after smashing the alarm clock gives a contextual reply, not the generic refusal', () => {
+    const state = fresh();
+    execute({ action: 'smash', target: 'alarm clock' }, { world, state });
+    const result = execute({ action: 'snooze' }, { world, state });
+    expect(result.lines.join('\n')).toMatch(/smashed the alarm clock|in pieces|oversleep/i);
+    // Must NOT be the generic refusal.
+    expect(result.lines.join('\n')).not.toMatch(/^There is nothing here to snooze\.$/);
+  });
+
   it('printer smash still works post-onSmash hook (no regression)', () => {
     const state = fresh();
     state.currentRoom = 'the_field';

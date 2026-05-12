@@ -454,6 +454,15 @@ function handleSnooze(world: World, state: GameState): EngineResult {
     .map((id) => ({ id, item: world.items[id] }))
     .find(({ item }) => item?.onSnooze);
   if (!snoozable || !snoozable.item?.onSnooze) {
+    if (state.flags.alarm_clock_smashed && state.currentRoom === 'apartment_bedroom') {
+      return {
+        lines: [
+          'You smashed the alarm clock. It is in pieces on the bedside table.',
+          'You will probably oversleep tomorrow. This feels, on balance, fine.',
+        ],
+        mutated: false,
+      };
+    }
     return { lines: ['There is nothing here to snooze.'], mutated: false };
   }
   const lines = [...(world.events[snoozable.item.onSnooze] ?? [])];
