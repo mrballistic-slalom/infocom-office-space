@@ -268,13 +268,32 @@ describe('execute — SMASH flow', () => {
     expect(result.lines[0]).toMatch(/frowned upon/i);
   });
 
-  it('SMASH in the_field without a bat says "you would need something heavy"', () => {
+  it('SMASH printer without a bat in the break room fires hand-hurt', () => {
+    const state = fresh();
+    state.currentRoom = 'break_room';
+    const result = execute({ action: 'smash', target: 'printer' }, { world, state });
+    expect(state.flags.printer_hand_hurt).toBe(true);
+    expect(result.mutated).toBe(true);
+    expect(result.lines.join('\n')).toMatch(/bolted|PC LOAD LETTER|hand/i);
+  });
+
+  it('SMASH printer in the_field without a bat ALSO fires hand-hurt (bare-handed printer-fighting hurts everywhere)', () => {
     const state = fresh();
     state.flags.hypnotized = true;
     state.flags.has_scheme = true;
     state.currentRoom = 'the_field';
     const result = execute({ action: 'smash', target: 'printer' }, { world, state });
-    expect(result.lines[0]).toMatch(/something heavy/i);
+    expect(state.flags.printer_hand_hurt).toBe(true);
+    expect(state.gameOver).toBe(false);
+    expect(result.lines.join('\n')).toMatch(/bolted|PC LOAD LETTER|hand/i);
+  });
+
+  it('SMASH printer twice without a bat — second hit gets the taunt instead of replay', () => {
+    const state = fresh();
+    state.currentRoom = 'break_room';
+    execute({ action: 'smash', target: 'printer' }, { world, state });
+    const second = execute({ action: 'smash', target: 'printer' }, { world, state });
+    expect(second.lines[0]).toMatch(/winning|already hurts|It already hurts/i);
   });
 
   it('SMASH in the_field with a bat fires printer_smash, chains game_ending, ends the game', () => {

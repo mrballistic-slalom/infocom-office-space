@@ -569,6 +569,12 @@ export const officeSpace: World = {
       '"And so it begins. Another Monday. The radio jock is laughing again."',
       '✨ CHAPTER 1: ANOTHER CASE OF THE MONDAYS',
     ],
+    printer_hand_hurt: [
+      '🤜 You drive your fist into the side of the printer.',
+      '🤜 The printer does not move. It is bolted to the table.',
+      '😖 Your hand, on the other hand, has moved. It is now several colors.',
+      '"PC LOAD LETTER," the printer suggests, helpfully.',
+    ],
     smash_alarm: [
       '🔨 You bring a fist down on the alarm clock. The radio gives a sharp, digital yelp.',
       '🔨 You bring it down again. The DJ stops laughing.',
